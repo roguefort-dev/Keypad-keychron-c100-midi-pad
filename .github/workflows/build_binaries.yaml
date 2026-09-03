@@ -1,0 +1,23 @@
+name: Build QMK firmware
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: QMK Userspace Build
+    uses: qmk/.github/.github/workflows/qmk_userspace_build.yml@main
+    with:
+      qmk_repo: Keychron/qmk_firmware
+      qmk_ref: 2025q3
+
+  publish:
+    name: QMK Userspace Publish
+    if: always() && !cancelled()
+    needs: build
+    uses: qmk/.github/.github/workflows/qmk_userspace_publish.yml@main
+

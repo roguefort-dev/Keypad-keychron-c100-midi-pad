@@ -1,0 +1,7 @@
+{
+  "userspace_version": "1.1",
+  "build_targets": [
+    ["keychron/c100_8k", "midi_pad"]
+  ]
+}
+

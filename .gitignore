@@ -1,0 +1,16 @@
+# Firmware build output
+*.bin
+*.hex
+*.uf2
+*.elf
+*.map
+
+# QMK/editor caches
+.build/
+.cache/
+compile_commands.json
+.clangd/
+.DS_Store
+*.swp
+*~
+
