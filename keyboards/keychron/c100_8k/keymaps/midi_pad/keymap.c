@@ -164,7 +164,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 #define SETTINGS_UNSELECTED_BRIGHTNESS 180
 #define PERFORMANCE_PAD_BRIGHTNESS 100
 #define PERFORMANCE_NAV_BRIGHTNESS 200
-#define MIDI_PAD_CONFIG_VERSION 0xA1
+#define MIDI_PAD_CONFIG_VERSION 0xA2
 
 typedef struct {
   uint8_t note_count;
@@ -274,7 +274,7 @@ static const palette_color_t PROGMEM
         [PALETTE_TERMINAL] =
             {
                 [COLOR_PRIMARY] = {0x00, 0xB3, 0xFF},
-                [COLOR_SECONDARY] = {0x00, 0xFF, 0xD5},
+                [COLOR_SECONDARY] = {0xFF, 0xA2, 0x00},
                 [COLOR_TERTIARY] = {0xFF, 0x00, 0x00},
                 [COLOR_QUATERNARY] = {0x1F, 0xFF, 0x62},
                 [COLOR_QUINARY] = {0xFB, 0xFF, 0x00},
@@ -359,7 +359,7 @@ static uint8_t active_note_counts[MIDI_MAX_NOTE + 1];
 static uint8_t root_pitch_class = 4; // E
 static uint8_t selected_scale = SCALE_NATURAL_MINOR;
 static uint8_t scale_page = 0;
-static uint8_t selected_palette = PALETTE_NEON;
+static uint8_t selected_palette = PALETTE_TERMINAL;
 static uint8_t midi_velocity = MIDI_PAD_DEFAULT_VELOCITY;
 static int8_t octave_shift = 0;
 static midi_pad_config_t persistent_config;
@@ -377,7 +377,7 @@ static void set_default_persistent_config(void) {
   persistent_config.values.version = MIDI_PAD_CONFIG_VERSION;
   persistent_config.values.root_pitch_class = 4; // E
   persistent_config.values.selected_scale = SCALE_NATURAL_MINOR;
-  persistent_config.values.selected_palette = PALETTE_NEON;
+  persistent_config.values.selected_palette = PALETTE_TERMINAL;
 }
 
 static bool persistent_config_is_valid(void) {

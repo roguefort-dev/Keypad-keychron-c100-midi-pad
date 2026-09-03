@@ -76,13 +76,13 @@ use the full 255 level, while ordinary pads are dimmed to preserve hierarchy.
 |---|---|---|---|---|---|
 | Neon | `#002AFF` | `#00FBFF` | `#AE00FF` | `#FF00EA` | `#FF0033` |
 | Cyberpunk | `#FF00AE` | `#FF7300` | `#B3FF00` | `#FFD500` | `#FF006F` |
-| Terminal | `#00B3FF` | `#00FFD5` | `#FF0000` | `#1FFF62` | `#FBFF00` |
+| Terminal | `#00B3FF` | `#FFA200` | `#FF0000` | `#1FFF62` | `#FBFF00` |
 | Navy | `#009DFF` | `#FF7300` | `#FFFF00` | `#BE00FF` | `#00FF5A` |
 | Matrix | `#00FFCC` | `#B3FF00` | `#FF00C8` | `#FF0000` | `#FF9500` |
 
 The last selected palette, root key, and scale are saved to EEPROM whenever
 they change and restored after unplugging or rebooting. A fresh or reset board
-starts with Neon, E, and natural minor.
+starts with Terminal, E, and natural minor.
 
 ## Layer navigation
 
@@ -110,7 +110,7 @@ The resulting file is `keychron_c100_8k_midi_pad.bin` in this repository's
 root. GitHub Actions also builds the firmware after each push and publishes the
 binary through the repository workflow.
 
-The current build uses 61,298 bytes of the target's verified 128 KiB flash
+The current build uses 61,302 bytes of the target's verified 128 KiB flash
 region (about 47%).
 
 ## Test MIDI after flashing
