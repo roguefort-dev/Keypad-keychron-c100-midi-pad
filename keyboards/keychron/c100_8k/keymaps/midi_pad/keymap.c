@@ -164,6 +164,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 #define SETTINGS_UNSELECTED_BRIGHTNESS 180
 #define PERFORMANCE_PAD_BRIGHTNESS 100
 #define PERFORMANCE_NAV_BRIGHTNESS 200
+#define MIDI_PAD_CONFIG_VERSION 0xA1
 
 typedef struct {
   uint8_t note_count;
@@ -220,17 +221,18 @@ enum palette_id {
   PALETTE_NEON,
   PALETTE_CYBERPUNK,
   PALETTE_TERMINAL,
-  PALETTE_RAINBOW,
+  PALETTE_NAVY,
+  PALETTE_MATRIX,
   PALETTE_COUNT,
 };
 
-enum color_role {
-  COLOR_PAD,
-  COLOR_ROOT,
-  COLOR_PRESSED,
-  COLOR_NAV,
-  COLOR_DISPLAY,
-  COLOR_ROLE_COUNT,
+enum palette_color {
+  COLOR_PRIMARY,
+  COLOR_SECONDARY,
+  COLOR_TERTIARY,
+  COLOR_QUATERNARY,
+  COLOR_QUINARY,
+  PALETTE_COLOR_COUNT,
 };
 
 typedef struct {
@@ -239,72 +241,66 @@ typedef struct {
   uint8_t blue;
 } palette_color_t;
 
-// Every source color is fully saturated and has at least one channel at 255.
-// Intensity is applied separately so visual hierarchy never muddies the hue.
-static const palette_color_t PROGMEM palettes[PALETTE_COUNT]
-                                             [COLOR_ROLE_COUNT] = {
-                                                 [PALETTE_NEON] =
-                                                     {
-                                                         [COLOR_PAD] = {57, 255,
-                                                                        20},
-                                                         [COLOR_ROOT] = {255,
-                                                                         72, 0},
-                                                         [COLOR_PRESSED] =
-                                                             {0, 170, 255},
-                                                         [COLOR_NAV] = {255, 0,
-                                                                        204},
-                                                         [COLOR_DISPLAY] =
-                                                             {0, 229, 255},
-                                                     },
-                                                 [PALETTE_CYBERPUNK] =
-                                                     {
-                                                         [COLOR_PAD] = {255,
-                                                                        230, 0},
-                                                         [COLOR_ROOT] = {255, 0,
-                                                                         102},
-                                                         [COLOR_PRESSED] =
-                                                             {0, 255, 255},
-                                                         [COLOR_NAV] = {153, 0,
-                                                                        255},
-                                                         [COLOR_DISPLAY] =
-                                                             {255, 0, 221},
-                                                     },
-                                                 [PALETTE_TERMINAL] =
-                                                     {
-                                                         [COLOR_PAD] = {0, 255,
-                                                                        72},
-                                                         [COLOR_ROOT] = {255,
-                                                                         176,
-                                                                         0},
-                                                         [COLOR_PRESSED] =
-                                                             {0, 255, 204},
-                                                         [COLOR_NAV] = {255,
-                                                                        32, 32},
-                                                         [COLOR_DISPLAY] = {166,
-                                                                            255,
-                                                                            0},
-                                                     },
-                                                 [PALETTE_RAINBOW] =
-                                                     {
-                                                         [COLOR_PAD] = {0, 255,
-                                                                        90},
-                                                         [COLOR_ROOT] = {255,
-                                                                         50, 0},
-                                                         [COLOR_PRESSED] =
-                                                             {0, 110, 255},
-                                                         [COLOR_NAV] = {190, 0,
-                                                                        255},
-                                                         [COLOR_DISPLAY] = {255,
-                                                                            220,
-                                                                            0},
-                                                     },
+typedef union {
+  uint32_t raw;
+  struct {
+    uint8_t version;
+    uint8_t root_pitch_class;
+    uint8_t selected_scale;
+    uint8_t selected_palette;
+  } values;
+} midi_pad_config_t;
+
+// Palettes are five ordered source colors. Each view decides how to compose
+// them; brightness is applied separately from the palette itself.
+static const palette_color_t PROGMEM
+    palettes[PALETTE_COUNT][PALETTE_COLOR_COUNT] = {
+        [PALETTE_NEON] =
+            {
+                [COLOR_PRIMARY] = {0x00, 0x2A, 0xFF},
+                [COLOR_SECONDARY] = {0x00, 0xFB, 0xFF},
+                [COLOR_TERTIARY] = {0xAE, 0x00, 0xFF},
+                [COLOR_QUATERNARY] = {0xFF, 0x00, 0xEA},
+                [COLOR_QUINARY] = {0xFF, 0x00, 0x33},
+            },
+        [PALETTE_CYBERPUNK] =
+            {
+                [COLOR_PRIMARY] = {0xFF, 0x00, 0xAE},
+                [COLOR_SECONDARY] = {0xFF, 0x73, 0x00},
+                [COLOR_TERTIARY] = {0xB3, 0xFF, 0x00},
+                [COLOR_QUATERNARY] = {0xFF, 0xD5, 0x00},
+                [COLOR_QUINARY] = {0xFF, 0x00, 0x6F},
+            },
+        [PALETTE_TERMINAL] =
+            {
+                [COLOR_PRIMARY] = {0x00, 0xB3, 0xFF},
+                [COLOR_SECONDARY] = {0x00, 0xFF, 0xD5},
+                [COLOR_TERTIARY] = {0xFF, 0x00, 0x00},
+                [COLOR_QUATERNARY] = {0x1F, 0xFF, 0x62},
+                [COLOR_QUINARY] = {0xFB, 0xFF, 0x00},
+            },
+        [PALETTE_NAVY] =
+            {
+                [COLOR_PRIMARY] = {0x00, 0x9D, 0xFF},
+                [COLOR_SECONDARY] = {0xFF, 0x73, 0x00},
+                [COLOR_TERTIARY] = {0xFF, 0xFF, 0x00},
+                [COLOR_QUATERNARY] = {0xBE, 0x00, 0xFF},
+                [COLOR_QUINARY] = {0x00, 0xFF, 0x5A},
+            },
+        [PALETTE_MATRIX] =
+            {
+                [COLOR_PRIMARY] = {0x00, 0xFF, 0xCC},
+                [COLOR_SECONDARY] = {0xB3, 0xFF, 0x00},
+                [COLOR_TERTIARY] = {0xFF, 0x00, 0xC8},
+                [COLOR_QUATERNARY] = {0xFF, 0x00, 0x00},
+                [COLOR_QUINARY] = {0xFF, 0x95, 0x00},
+            },
 };
 
 static const char PROGMEM palette_names[PALETTE_COUNT][12] = {
-    [PALETTE_NEON] = "NEON",
-    [PALETTE_CYBERPUNK] = "CYBERPUNK",
-    [PALETTE_TERMINAL] = "TERMINAL",
-    [PALETTE_RAINBOW] = "RAINBOW",
+    [PALETTE_NEON] = "NEON",         [PALETTE_CYBERPUNK] = "CYBERPUNK",
+    [PALETTE_TERMINAL] = "TERMINAL", [PALETTE_NAVY] = "NAVY",
+    [PALETTE_MATRIX] = "MATRIX",
 };
 
 // TomTentacles is a fixed-width 3x6 CC0 font. Bits 7..5 are left to right.
@@ -366,6 +362,7 @@ static uint8_t scale_page = 0;
 static uint8_t selected_palette = PALETTE_NEON;
 static uint8_t midi_velocity = MIDI_PAD_DEFAULT_VELOCITY;
 static int8_t octave_shift = 0;
+static midi_pad_config_t persistent_config;
 static enum display_mode settings_display = DISPLAY_ROOT;
 static enum page_arrow transient_arrow = PAGE_ARROW_NONE;
 static enum scroll_source text_scroll_source = SCROLL_SCALE_NAME;
@@ -375,6 +372,34 @@ static uint32_t page_arrow_timer = 0;
 static bool text_scroll_holding = false;
 static bool palette_announcement = false;
 
+static void set_default_persistent_config(void) {
+  persistent_config.raw = 0;
+  persistent_config.values.version = MIDI_PAD_CONFIG_VERSION;
+  persistent_config.values.root_pitch_class = 4; // E
+  persistent_config.values.selected_scale = SCALE_NATURAL_MINOR;
+  persistent_config.values.selected_palette = PALETTE_NEON;
+}
+
+static bool persistent_config_is_valid(void) {
+  return persistent_config.values.version == MIDI_PAD_CONFIG_VERSION &&
+         persistent_config.values.root_pitch_class < PITCH_CLASS_COUNT &&
+         persistent_config.values.selected_scale < SCALE_MODE_COUNT &&
+         persistent_config.values.selected_palette < PALETTE_COUNT;
+}
+
+static void save_persistent_selection(void) {
+  midi_pad_config_t updated = persistent_config;
+  updated.values.version = MIDI_PAD_CONFIG_VERSION;
+  updated.values.root_pitch_class = root_pitch_class;
+  updated.values.selected_scale = selected_scale;
+  updated.values.selected_palette = selected_palette;
+
+  if (updated.raw != persistent_config.raw) {
+    persistent_config = updated;
+    eeconfig_update_user(persistent_config.raw);
+  }
+}
+
 static uint8_t led_index(uint8_t row, uint8_t col) {
   return (row * MATRIX_COLS) + col;
 }
@@ -383,9 +408,9 @@ static uint8_t scale_component(uint8_t component, uint8_t brightness) {
   return ((uint16_t)component * brightness) / 255;
 }
 
-static void set_palette_color(uint8_t led, enum color_role role,
+static void set_palette_color(uint8_t led, enum palette_color color_index,
                               uint8_t brightness) {
-  const palette_color_t *color = &palettes[selected_palette][role];
+  const palette_color_t *color = &palettes[selected_palette][color_index];
   const uint8_t red = pgm_read_byte(&color->red);
   const uint8_t green = pgm_read_byte(&color->green);
   const uint8_t blue = pgm_read_byte(&color->blue);
@@ -394,9 +419,9 @@ static void set_palette_color(uint8_t led, enum color_role role,
                        scale_component(blue, brightness));
 }
 
-static void set_key_color(uint8_t row, uint8_t col, enum color_role role,
-                          uint8_t brightness) {
-  set_palette_color(led_index(row, col), role, brightness);
+static void set_key_color(uint8_t row, uint8_t col,
+                          enum palette_color color_index, uint8_t brightness) {
+  set_palette_color(led_index(row, col), color_index, brightness);
 }
 
 static bool is_black_key(uint8_t pitch_class) {
@@ -491,6 +516,7 @@ static void select_root(uint8_t pitch_class) {
   clear_page_arrow();
   cancel_palette_announcement();
   root_pitch_class = pitch_class;
+  save_persistent_selection();
   settings_display = DISPLAY_ROOT;
 }
 
@@ -499,6 +525,7 @@ static void select_scale(uint8_t scale) {
   clear_page_arrow();
   cancel_palette_announcement();
   selected_scale = scale;
+  save_persistent_selection();
   settings_display = DISPLAY_SCALE;
   start_text_scroll(SCROLL_SCALE_NAME);
 }
@@ -517,11 +544,27 @@ static void change_palette(int8_t amount) {
   clear_page_arrow();
   selected_palette =
       (selected_palette + amount + PALETTE_COUNT) % PALETTE_COUNT;
+  save_persistent_selection();
   palette_announcement = true;
   start_text_scroll(SCROLL_PALETTE_NAME);
 }
 
+void eeconfig_init_user(void) {
+  set_default_persistent_config();
+  eeconfig_update_user(persistent_config.raw);
+}
+
 void keyboard_post_init_user(void) {
+  persistent_config.raw = eeconfig_read_user();
+  if (!persistent_config_is_valid()) {
+    eeconfig_init_user();
+  }
+
+  root_pitch_class = persistent_config.values.root_pitch_class;
+  selected_scale = persistent_config.values.selected_scale;
+  selected_palette = persistent_config.values.selected_palette;
+  scale_page = selected_scale / SCALE_PAGE_SIZE;
+
   for (uint8_t row = 0; row < MATRIX_ROWS; ++row) {
     for (uint8_t col = 0; col < MATRIX_COLS; ++col) {
       active_notes[row][col] = NO_ACTIVE_NOTE;
@@ -690,9 +733,10 @@ static bool font_pixel(char character, uint8_t row, uint8_t col) {
   return row_bits & (0x80 >> col);
 }
 
-static void draw_font_pixel(uint8_t row, uint8_t col, enum color_role role,
+static void draw_font_pixel(uint8_t row, uint8_t col,
+                            enum palette_color color_index,
                             uint8_t brightness) {
-  set_key_color(DISPLAY_ROW + row, DISPLAY_COL + col, role, brightness);
+  set_key_color(DISPLAY_ROW + row, DISPLAY_COL + col, color_index, brightness);
 }
 
 static void render_root_preview(void) {
@@ -700,17 +744,17 @@ static void render_root_preview(void) {
   for (uint8_t row = 0; row < DISPLAY_HEIGHT; ++row) {
     for (uint8_t col = 0; col < GLYPH_WIDTH; ++col) {
       if (font_pixel(letter, row, col)) {
-        draw_font_pixel(row, col, COLOR_ROOT, 255);
+        draw_font_pixel(row, col, COLOR_TERTIARY, 255);
       }
     }
   }
 
   if (is_black_key(root_pitch_class)) {
     // One blank column separates the 3x6 letter from this 2x2 marker.
-    set_key_color(DISPLAY_ROW, DISPLAY_COL + 4, COLOR_PRESSED, 255);
-    set_key_color(DISPLAY_ROW, DISPLAY_COL + 5, COLOR_PRESSED, 255);
-    set_key_color(DISPLAY_ROW + 1, DISPLAY_COL + 4, COLOR_PRESSED, 255);
-    set_key_color(DISPLAY_ROW + 1, DISPLAY_COL + 5, COLOR_PRESSED, 255);
+    set_key_color(DISPLAY_ROW, DISPLAY_COL + 4, COLOR_SECONDARY, 255);
+    set_key_color(DISPLAY_ROW, DISPLAY_COL + 5, COLOR_SECONDARY, 255);
+    set_key_color(DISPLAY_ROW + 1, DISPLAY_COL + 4, COLOR_SECONDARY, 255);
+    set_key_color(DISPLAY_ROW + 1, DISPLAY_COL + 5, COLOR_SECONDARY, 255);
   }
 }
 
@@ -734,7 +778,7 @@ static void render_scrolling_text(void) {
     const char letter = text_character(text_scroll_source, letter_index);
     for (uint8_t row = 0; row < DISPLAY_HEIGHT; ++row) {
       if (font_pixel(letter, row, glyph_col)) {
-        draw_font_pixel(row, view_col, COLOR_DISPLAY, 255);
+        draw_font_pixel(row, view_col, COLOR_TERTIARY, 255);
       }
     }
   }
@@ -751,7 +795,7 @@ static void render_page_arrow(void) {
     const uint8_t row_bits = pgm_read_byte(&arrows[arrow_index][row]);
     for (uint8_t col = 0; col < GLYPH_WIDTH; ++col) {
       if (row_bits & (0x80 >> col)) {
-        draw_font_pixel(row, col, COLOR_NAV, 255);
+        draw_font_pixel(row, col, COLOR_QUATERNARY, 255);
       }
     }
   }
@@ -762,9 +806,9 @@ static void set_root_selector_led(uint8_t pitch_class) {
   const uint8_t col = pitch_class % 2;
   const uint8_t led = led_index(row, col);
   if (pitch_class == root_pitch_class) {
-    set_palette_color(led, COLOR_ROOT, 255);
+    set_palette_color(led, COLOR_TERTIARY, 255);
   } else {
-    set_palette_color(led, COLOR_ROOT, SETTINGS_UNSELECTED_BRIGHTNESS);
+    set_palette_color(led, COLOR_PRIMARY, SETTINGS_UNSELECTED_BRIGHTNESS);
   }
 }
 
@@ -777,9 +821,9 @@ static void set_scale_selector_led(uint8_t slot) {
   const uint8_t row = 1 + (slot / 9);
   const uint8_t col = slot % 9;
   if (scale == selected_scale) {
-    set_key_color(row, col, COLOR_DISPLAY, 255);
+    set_key_color(row, col, COLOR_SECONDARY, 255);
   } else {
-    set_key_color(row, col, COLOR_DISPLAY, SETTINGS_UNSELECTED_BRIGHTNESS);
+    set_key_color(row, col, COLOR_PRIMARY, SETTINGS_UNSELECTED_BRIGHTNESS);
   }
 }
 
@@ -793,16 +837,23 @@ static void render_settings_layer(void) {
   clear_all_leds();
   update_display_timers();
 
-  set_key_color(0, 0, COLOR_NAV, 255);     // Previous palette
-  set_key_color(0, 1, COLOR_DISPLAY, 255); // Next palette
-  set_key_color(0, 8, COLOR_NAV, 255);     // Layer select
-  set_key_color(0, 9, COLOR_ROOT, 255);    // Held Settings key
+  set_key_color(0, 0, COLOR_QUATERNARY, 255); // Previous palette
+  set_key_color(0, 1, COLOR_QUINARY, 255);    // Next palette
+
+  // Five passive swatches make the palette ordering visible in Settings.
+  for (uint8_t color_index = 0; color_index < PALETTE_COLOR_COUNT;
+       ++color_index) {
+    set_key_color(0, 2 + color_index, color_index, 255);
+  }
+
+  set_key_color(0, 8, COLOR_QUINARY, 255);    // Layer select
+  set_key_color(0, 9, COLOR_QUATERNARY, 255); // Held Settings key
 
   for (uint8_t slot = 0; slot < SCALE_PAGE_SIZE; ++slot) {
     set_scale_selector_led(slot);
   }
-  set_key_color(1, 9, COLOR_NAV, 255); // Page up
-  set_key_color(2, 9, COLOR_NAV, 255); // Page down
+  set_key_color(1, 9, COLOR_QUATERNARY, 255); // Page up
+  set_key_color(2, 9, COLOR_QUINARY, 255);    // Page down
 
   for (uint8_t pitch_class = 0; pitch_class < PITCH_CLASS_COUNT;
        ++pitch_class) {
@@ -820,20 +871,23 @@ static void render_settings_layer(void) {
 
 static void render_scale_layer(void) {
   clear_all_leds();
-  set_key_color(0, 0, COLOR_NAV, PERFORMANCE_NAV_BRIGHTNESS); // Octave down
-  set_key_color(0, 1, COLOR_NAV, PERFORMANCE_NAV_BRIGHTNESS); // Octave up
-  set_key_color(0, 9, COLOR_NAV, PERFORMANCE_NAV_BRIGHTNESS); // Settings
+  set_key_color(0, 0, COLOR_QUATERNARY,
+                PERFORMANCE_NAV_BRIGHTNESS); // Octave down
+  set_key_color(0, 1, COLOR_QUINARY,
+                PERFORMANCE_NAV_BRIGHTNESS); // Octave up
+  set_key_color(0, 9, COLOR_QUATERNARY,
+                PERFORMANCE_NAV_BRIGHTNESS); // Settings
 
   for (uint8_t row = 1; row < MATRIX_ROWS; ++row) {
     for (uint8_t col = 0; col < MATRIX_COLS; ++col) {
       const uint8_t note = note_for_position(row, col);
       const uint8_t led = led_index(row, col);
       if (active_note_counts[note] > 0) {
-        set_palette_color(led, COLOR_PRESSED, 255);
+        set_palette_color(led, COLOR_SECONDARY, 255);
       } else if (note % PITCH_CLASS_COUNT == root_pitch_class) {
-        set_palette_color(led, COLOR_ROOT, 255);
+        set_palette_color(led, COLOR_TERTIARY, 255);
       } else {
-        set_palette_color(led, COLOR_PAD, PERFORMANCE_PAD_BRIGHTNESS);
+        set_palette_color(led, COLOR_PRIMARY, PERFORMANCE_PAD_BRIGHTNESS);
       }
     }
   }
@@ -841,15 +895,17 @@ static void render_scale_layer(void) {
 
 static void render_chord_layer(void) {
   clear_all_leds();
-  set_key_color(0, 0, COLOR_NAV, PERFORMANCE_NAV_BRIGHTNESS); // Octave down
-  set_key_color(0, 1, COLOR_NAV, PERFORMANCE_NAV_BRIGHTNESS); // Octave up
-  set_key_color(0, 9, COLOR_NAV, 255);                        // Layer select
+  set_key_color(0, 0, COLOR_QUATERNARY,
+                PERFORMANCE_NAV_BRIGHTNESS); // Octave down
+  set_key_color(0, 1, COLOR_QUINARY,
+                PERFORMANCE_NAV_BRIGHTNESS);  // Octave up
+  set_key_color(0, 9, COLOR_QUATERNARY, 255); // Layer select
 }
 
 static void render_layer_select(void) {
   clear_all_leds();
-  set_key_color(0, 0, COLOR_ROOT, 255);    // Scale
-  set_key_color(0, 1, COLOR_DISPLAY, 255); // Chord placeholder
+  set_key_color(0, 0, COLOR_PRIMARY, 255);   // Scale
+  set_key_color(0, 1, COLOR_SECONDARY, 255); // Chord placeholder
 }
 
 bool rgb_matrix_indicators_user(void) {

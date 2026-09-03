@@ -40,6 +40,8 @@ Hold the top-right Settings key to open this 10×10 layout:
 - The top-left two keys select the previous or next color palette. The new
   palette applies immediately, and its name scrolls through one complete pass
   before the previous root/scale display returns.
+- The next five top-row keys show the palette's primary through quinary colors
+  at full brightness, so the Settings view previews the actual keyboard theme.
 - The two scale rows contain 18 selections per page. Their rightmost keys move
   to the previous or next page and briefly show a 3×6 pixel arrow.
 - The lower-left 6×2 block selects the root: `C/C♯`, `D/D♯`, `E/F`, `F♯/G`,
@@ -63,18 +65,24 @@ leaving room for sixteen more scales without another layout change.
 
 ## Color palettes
 
-Each palette contains five saturated source colors for ordinary pads, roots,
-pressed notes, navigation, and the character display. Brightness is applied
-separately: roots and pressed notes use the full 255 level, while ordinary pads
-are dimmed just enough to keep those accents clear. Settings uses much higher
-levels throughout.
+Each palette is five ordered source colors rather than five rigid UI roles.
+Individual views compose them consistently: Scale mode uses Primary for idle
+notes, Tertiary for roots and the character display, and Secondary for pressed
+notes. Quaternary and Quinary provide complementary controls and navigation.
+Brightness is applied separately: roots, pressed notes, and Settings accents
+use the full 255 level, while ordinary pads are dimmed to preserve hierarchy.
 
-| Palette | Pad | Root | Pressed | Navigation | Display |
+| Palette | Primary | Secondary | Tertiary | Quaternary | Quinary |
 |---|---|---|---|---|---|
-| Neon | `#39FF14` | `#FF4800` | `#00AAFF` | `#FF00CC` | `#00E5FF` |
-| Cyberpunk | `#FFE600` | `#FF0066` | `#00FFFF` | `#9900FF` | `#FF00DD` |
-| Terminal | `#00FF48` | `#FFB000` | `#00FFCC` | `#FF2020` | `#A6FF00` |
-| Rainbow | `#00FF5A` | `#FF3200` | `#006EFF` | `#BE00FF` | `#FFDC00` |
+| Neon | `#002AFF` | `#00FBFF` | `#AE00FF` | `#FF00EA` | `#FF0033` |
+| Cyberpunk | `#FF00AE` | `#FF7300` | `#B3FF00` | `#FFD500` | `#FF006F` |
+| Terminal | `#00B3FF` | `#00FFD5` | `#FF0000` | `#1FFF62` | `#FBFF00` |
+| Navy | `#009DFF` | `#FF7300` | `#FFFF00` | `#BE00FF` | `#00FF5A` |
+| Matrix | `#00FFCC` | `#B3FF00` | `#FF00C8` | `#FF0000` | `#FF9500` |
+
+The last selected palette, root key, and scale are saved to EEPROM whenever
+they change and restored after unplugging or rebooting. A fresh or reset board
+starts with Neon, E, and natural minor.
 
 ## Layer navigation
 
@@ -102,8 +110,8 @@ The resulting file is `keychron_c100_8k_midi_pad.bin` in this repository's
 root. GitHub Actions also builds the firmware after each push and publishes the
 binary through the repository workflow.
 
-The current build uses 61,030 bytes of the target's verified 128 KiB flash
-region (about 46%).
+The current build uses 61,298 bytes of the target's verified 128 KiB flash
+region (about 47%).
 
 ## Test MIDI after flashing
 
