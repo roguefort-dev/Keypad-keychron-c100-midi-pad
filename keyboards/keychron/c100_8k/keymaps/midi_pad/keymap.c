@@ -551,8 +551,10 @@ static uint8_t previous_chord_note_count = 0;
 static uint16_t custom_degree_mask = (1U << 0) | (1U << 2) | (1U << 4);
 static uint8_t custom_degree_octave_lifts[CHORD_DEGREE_COUNT];
 static uint16_t preset_extension_mask;
-static uint8_t preset_extension_octave_lifts[CHORD_DEGREE_COUNT];
+static uint8_t preset_extension_order[CHORD_DEGREE_COUNT];
+static uint8_t preset_extension_count;
 static int8_t selected_chord_shape = -1;
+static uint64_t held_chord_shape_mask;
 static uint8_t chord_inversion = 0;
 static uint8_t chord_bass = 0;
 static uint8_t chord_drop = 0;
@@ -947,15 +949,12 @@ static uint16_t score_chord_voice(const int16_t *tones, uint8_t count) {
 
 static uint8_t current_chord_tone_count(void) {
   if (selected_chord_shape >= 0) {
-    uint8_t count = pgm_read_byte(
+    const uint8_t preset_count = pgm_read_byte(
         &chord_definitions[selected_chord_shape].note_count);
-    for (uint8_t degree = 0;
-         degree < CHORD_DEGREE_COUNT && count < CHORD_MAX_TONES; ++degree) {
-      if (preset_extension_mask & (1U << degree)) {
-        ++count;
-      }
-    }
-    return count;
+    const uint8_t available = CHORD_MAX_TONES - preset_count;
+    return preset_count +
+           (preset_extension_count < available ? preset_extension_count
+                                               : available);
   }
   uint8_t count = 0;
   for (uint8_t degree = 0; degree < CHORD_DEGREE_COUNT; ++degree) {
@@ -981,12 +980,16 @@ static uint8_t build_chord_notes(uint8_t root_note, uint8_t *output,
                                     &chord_definitions[selected_chord_shape]
                                          .intervals[index]);
     }
-    for (uint8_t degree = 0;
-         degree < CHORD_DEGREE_COUNT && count < CHORD_MAX_TONES; ++degree) {
-      if (preset_extension_mask & (1U << degree)) {
-        base[count++] = chord_note_for_degree(root_note, degree) +
-                        (preset_extension_octave_lifts[degree] * 12);
-      }
+    sort_chord_tones(base, count);
+    for (uint8_t extension = 0;
+         extension < preset_extension_count && count < CHORD_MAX_TONES;
+         ++extension) {
+      uint8_t octave_lifts;
+      base[count] = chord_note_above(
+          chord_note_for_degree(root_note, preset_extension_order[extension]),
+          base[count - 1], &octave_lifts);
+      ++count;
+      sort_chord_tones(base, count);
     }
   } else {
     for (uint8_t degree = 0; degree < CHORD_DEGREE_COUNT; ++degree) {
@@ -1224,18 +1227,22 @@ static void select_chord_shape(uint8_t shape) {
   cancel_chord_parameter_display();
   selected_chord_shape = shape;
   preset_extension_mask = 0;
-  for (uint8_t degree = 0; degree < CHORD_DEGREE_COUNT; ++degree) {
-    preset_extension_octave_lifts[degree] = 0;
-  }
+  preset_extension_count = 0;
   normalize_chord_controls();
   revoice_active_chords();
+}
+
+static bool selected_chord_shape_is_held(void) {
+  return selected_chord_shape >= 0 &&
+         (held_chord_shape_mask & (UINT64_C(1) << selected_chord_shape));
 }
 
 static void toggle_chord_degree(uint8_t degree) {
   cancel_chord_parameter_display();
   const int8_t active_slot = first_active_chord_slot();
   const enum chord_degree_action action = chord_degree_action_for_state(
-      selected_chord_shape >= 0, active_slot >= 0);
+      selected_chord_shape >= 0, active_slot >= 0,
+      selected_chord_shape_is_held());
   const bool entering_custom = action == CHORD_DEGREE_START_CUSTOM;
   const bool extending_preset = action == CHORD_DEGREE_EXTEND_PRESET;
   const bool was_enabled =
@@ -1244,21 +1251,28 @@ static void toggle_chord_degree(uint8_t degree) {
 
   if (entering_custom) {
     preset_extension_mask = 0;
+    preset_extension_count = 0;
     custom_degree_mask = (1U << 0) | (1U << degree);
     for (uint8_t index = 0; index < CHORD_DEGREE_COUNT; ++index) {
       custom_degree_octave_lifts[index] = 0;
-      preset_extension_octave_lifts[index] = 0;
     }
   } else if (extending_preset) {
     if (was_enabled) {
       preset_extension_mask &= ~(1U << degree);
-      preset_extension_octave_lifts[degree] = 0;
-    } else {
-      const active_chord_t *chord = &active_chords[active_slot];
+      for (uint8_t index = 0; index < preset_extension_count; ++index) {
+        if (preset_extension_order[index] == degree) {
+          for (uint8_t following = index + 1;
+               following < preset_extension_count; ++following) {
+            preset_extension_order[following - 1] =
+                preset_extension_order[following];
+          }
+          --preset_extension_count;
+          break;
+        }
+      }
+    } else if (current_chord_tone_count() < CHORD_MAX_TONES) {
       preset_extension_mask |= (1U << degree);
-      const uint8_t highest = chord->notes[chord->note_count - 1];
-      chord_note_above(chord_note_for_degree(chord->root_note, degree), highest,
-                       &preset_extension_octave_lifts[degree]);
+      preset_extension_order[preset_extension_count++] = degree;
     }
   } else if (was_enabled) {
     const uint16_t updated = custom_degree_mask & ~(1U << degree);
@@ -1545,11 +1559,16 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     }
     return false;
 
-  case CH_SHAPE_0 ... CH_SHAPE_34:
+  case CH_SHAPE_0 ... CH_SHAPE_34: {
+    const uint8_t shape = keycode - CH_SHAPE_0;
     if (record->event.pressed) {
-      select_chord_shape(keycode - CH_SHAPE_0);
+      held_chord_shape_mask |= UINT64_C(1) << shape;
+      select_chord_shape(shape);
+    } else {
+      held_chord_shape_mask &= ~(UINT64_C(1) << shape);
     }
     return false;
+  }
 
   case CH_INV:
     process_chord_control(CHORD_CONTROL_INVERSION, record->event.pressed);

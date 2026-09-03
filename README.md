@@ -7,6 +7,8 @@ Keychron's QMK fork. The default layer is an isomorphic **E natural minor** MIDI
 controller with selectable roots and scales, octave controls, and responsive
 per-key RGB.
 
+![Keychron C100 8K running the MIDI pad firmware](docs/images/keychron-c100-midi-pad.jpeg)
+
 ## Scale performance layer
 
 The top-left two keys shift the playable range down or up by one octave. The
@@ -52,11 +54,13 @@ to the right within each family and upward across the board:
 The two rows above the presets toggle scale-relative chord degrees 1–14. The
 default custom chord is `1·3·5`. Choosing a degree while an idle preset is
 selected starts a fresh custom chord containing only degree 1 and the chosen
-degree; degree 1 can then be removed for rootless voicings. When a preset chord
-is held or latched, degree buttons instead preserve its fixed tones and add the
-chosen scale-relative extension above its current highest tone (for example,
-Maj7 + degree 2 becomes Maj7(add9)). Active custom chords use the same
-above-highest behavior, and the MIDI chord is re-voiced immediately.
+degree; degree 1 can then be removed for rootless voicings. While either the
+preset key itself or one of its playable root notes is held, degree buttons
+instead preserve the preset's fixed tones and queue scale-relative extensions
+in press order above its current highest tone (for example, Maj7 + degree 2
+becomes Maj7(add9)). This also works before a root note is played. Active custom
+chords use the same above-highest behavior, and the MIDI chord is re-voiced
+immediately.
 
 Fixed presets keep their literal chromatic intervals even when a chord contains
 notes outside the selected scale. For example, the Maj preset on E always sends
@@ -170,7 +174,7 @@ The resulting file is `keychron_c100_8k_midi_pad.bin` in this repository's
 root. GitHub Actions also builds the firmware after each push and publishes the
 binary through the repository workflow.
 
-The current build uses 66,934 bytes of the target's verified 128 KiB flash
+The current build uses 67,062 bytes of the target's verified 128 KiB flash
 region (about 50%).
 
 ## Test MIDI after flashing
