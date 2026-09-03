@@ -42,7 +42,9 @@ Hold the top-right Settings key while choosing an option:
 
 E and Natural minor are selected at startup. Root and scale changes release
 all sounding notes first, preventing stuck notes. The selected root and scale
-are highlighted while Settings is held.
+are highlighted while Settings is held. The lower seven rows show the selected
+root as a persistent 5×7 pixel-art letter; sharp roots add a cyan 3×7 `#`
+beside the amber letter without obscuring the controls.
 
 ## Build locally
 

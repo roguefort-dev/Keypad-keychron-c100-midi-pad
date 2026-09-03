@@ -268,6 +268,69 @@ static bool is_black_key(uint8_t pitch_class) {
   }
 }
 
+enum note_glyph {
+  GLYPH_A,
+  GLYPH_B,
+  GLYPH_C,
+  GLYPH_D,
+  GLYPH_E,
+  GLYPH_F,
+  GLYPH_G,
+};
+
+// Five columns by seven rows. The low five bits describe one LED row.
+static const uint8_t PROGMEM note_glyphs[][7] = {
+    [GLYPH_A] = {0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11},
+    [GLYPH_B] = {0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E},
+    [GLYPH_C] = {0x0F, 0x10, 0x10, 0x10, 0x10, 0x10, 0x0F},
+    [GLYPH_D] = {0x1E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1E},
+    [GLYPH_E] = {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F},
+    [GLYPH_F] = {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10},
+    [GLYPH_G] = {0x0F, 0x10, 0x10, 0x17, 0x11, 0x11, 0x0F},
+};
+
+static const uint8_t PROGMEM sharp_glyph[7] = {
+    0x05, 0x05, 0x07, 0x05, 0x07, 0x05, 0x05,
+};
+
+static const uint8_t PROGMEM pitch_class_glyphs[PITCH_CLASS_COUNT] = {
+    GLYPH_C, GLYPH_C, GLYPH_D, GLYPH_D, GLYPH_E, GLYPH_F,
+    GLYPH_F, GLYPH_G, GLYPH_G, GLYPH_A, GLYPH_A, GLYPH_B,
+};
+
+static bool pitch_class_is_sharp(uint8_t pitch_class) {
+  return is_black_key(pitch_class);
+}
+
+static void render_root_preview(void) {
+  const bool is_sharp = pitch_class_is_sharp(root_pitch_class);
+  const uint8_t letter_start = is_sharp ? 0 : 2;
+  const uint8_t glyph = pgm_read_byte(&pitch_class_glyphs[root_pitch_class]);
+
+  // Rows 0-2 remain available for navigation and settings controls. A natural
+  // note is centered; a sharp note uses five columns, a gap, and three columns.
+  for (uint8_t glyph_row = 0; glyph_row < 7; ++glyph_row) {
+    const uint8_t letter_bits = pgm_read_byte(&note_glyphs[glyph][glyph_row]);
+    for (uint8_t glyph_col = 0; glyph_col < 5; ++glyph_col) {
+      if (letter_bits & (1 << (4 - glyph_col))) {
+        const uint8_t led =
+            (glyph_row + 3) * MATRIX_COLS + letter_start + glyph_col;
+        rgb_matrix_set_color(led, 145, 52, 0);
+      }
+    }
+
+    if (is_sharp) {
+      const uint8_t sharp_bits = pgm_read_byte(&sharp_glyph[glyph_row]);
+      for (uint8_t glyph_col = 0; glyph_col < 3; ++glyph_col) {
+        if (sharp_bits & (1 << (2 - glyph_col))) {
+          const uint8_t led = (glyph_row + 3) * MATRIX_COLS + 6 + glyph_col;
+          rgb_matrix_set_color(led, 0, 170, 255);
+        }
+      }
+    }
+  }
+}
+
 static void set_root_selector_led(uint8_t led, uint8_t pitch_class) {
   if (pitch_class == root_pitch_class) {
     rgb_matrix_set_color(led, 110, 38, 0);
@@ -304,6 +367,7 @@ static void render_settings_layer(void) {
 
   // Keep the held Settings key visibly distinct.
   rgb_matrix_set_color(9, 75, 0, 90);
+  render_root_preview();
 }
 
 static void render_midi_layer(void) {
