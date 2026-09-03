@@ -34,16 +34,6 @@ Settings provides root and scale selection, paged access to additional scales,
 and five color palettes. The selected key, scale, and palette are remembered
 after the keyboard is unplugged.
 
-Available palettes:
-
-| Palette | Primary | Secondary | Tertiary | Quaternary | Quinary |
-|---|---|---|---|---|---|
-| Neon | `#002AFF` | `#00FBFF` | `#AE00FF` | `#FF00EA` | `#FF0033` |
-| Cyberpunk | `#FF00AE` | `#FF7300` | `#B3FF00` | `#FFD500` | `#FF006F` |
-| Terminal | `#00B3FF` | `#FFA200` | `#FF0000` | `#1FFF62` | `#FBFF00` |
-| Navy | `#009DFF` | `#FF7300` | `#FFFF00` | `#BE00FF` | `#00FF5A` |
-| Matrix | `#00FFCC` | `#B3FF00` | `#FF00C8` | `#FF0000` | `#FF9500` |
-
 ### Move between modes and layers
 
 Scale and Chord mode share the same navigation row, so their essential controls
@@ -187,6 +177,16 @@ restored after unplugging or rebooting.
 
 A fresh or reset board uses these defaults. Settings accents use brightness
 255; idle chord presets use 180, and selected presets and degrees use 225.
+
+### Included color palettes
+
+| Palette | Primary | Secondary | Tertiary | Quaternary | Quinary |
+|---|---|---|---|---|---|
+| Neon | `#002AFF` | `#00FBFF` | `#AE00FF` | `#FF00EA` | `#FF0033` |
+| Cyberpunk | `#FF00AE` | `#FF7300` | `#B3FF00` | `#FFD500` | `#FF006F` |
+| Terminal | `#00B3FF` | `#FFA200` | `#FF0000` | `#1FFF62` | `#FBFF00` |
+| Navy | `#009DFF` | `#FF7300` | `#FFFF00` | `#BE00FF` | `#00FF5A` |
+| Matrix | `#00FFCC` | `#B3FF00` | `#FF00C8` | `#FF0000` | `#FF9500` |
 
 ## Build locally
 
