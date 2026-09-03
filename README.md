@@ -50,11 +50,13 @@ to the right within each family and upward across the board:
 | Major | Maj, Maj6, Maj7, Maj9, Maj11, Maj13, Maj13♯11 |
 
 The two rows above the presets toggle scale-relative chord degrees 1–14. The
-default custom chord is `1·3·5`. Choosing a degree while a preset is selected
-starts a fresh custom chord containing only degree 1 and the chosen degree;
-degree 1 can then be removed for rootless voicings. When a root is held or
-latched, newly enabled degrees are added above its current highest tone and the
-MIDI chord is re-voiced immediately.
+default custom chord is `1·3·5`. Choosing a degree while an idle preset is
+selected starts a fresh custom chord containing only degree 1 and the chosen
+degree; degree 1 can then be removed for rootless voicings. When a preset chord
+is held or latched, degree buttons instead preserve its fixed tones and add the
+chosen scale-relative extension above its current highest tone (for example,
+Maj7 + degree 2 becomes Maj7(add9)). Active custom chords use the same
+above-highest behavior, and the MIDI chord is re-voiced immediately.
 
 Fixed presets keep their literal chromatic intervals even when a chord contains
 notes outside the selected scale. For example, the Maj preset on E always sends
@@ -91,8 +93,8 @@ The stepped voicing controls use a separate rainbow palette. Enabled `AUTO`,
 `LATCH`, and `QNT` use the theme's Secondary color at the normal brightness of
 180, so they remain distinct from a 255-brightness physical press. All resting,
 selected, root, pressed, and chord-tone LEDs use the currently selected
-five-color theme. Idle presets use Quinary at brightness 180; selected presets
-and degrees retain Quinary but rise to brightness 225.
+five-color theme. Idle presets use Tertiary at brightness 180; selected
+presets and degrees use Quinary at brightness 225.
 
 ## Settings
 
@@ -168,7 +170,7 @@ The resulting file is `keychron_c100_8k_midi_pad.bin` in this repository's
 root. GitHub Actions also builds the firmware after each push and publishes the
 binary through the repository workflow.
 
-The current build uses 66,646 bytes of the target's verified 128 KiB flash
+The current build uses 66,934 bytes of the target's verified 128 KiB flash
 region (about 50%).
 
 ## Test MIDI after flashing
