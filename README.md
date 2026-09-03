@@ -10,10 +10,11 @@ per-key RGB.
 ## Scale performance layer
 
 The top-left two keys shift the playable range down or up by one octave. The
-top-right key momentarily opens Settings. The other top-row positions are kept
-free for future navigation.
+fourth and fifth keys switch directly to Scale or Chord mode, and the top-right
+key momentarily opens Settings. This row is identical in both performance
+modes.
 
-| Oct − | Oct + |  |  |  |  |  |  |  | Hold Settings |
+| Oct − | Oct + |  | Scale | Chord |  |  |  |  | Hold Settings |
 |---|---|---|---|---|---|---|---|---|---|
 
 The remaining 90 keys send notes from the selected scale. The lowest note is at
@@ -33,6 +34,48 @@ every pad that represents that exact MIDI note—including its duplicates—to t
 palette's full-intensity pressed color. Releasing the final duplicate restores
 the two-color resting state.
 
+## Chord performance layer
+
+Chord mode keeps the same top row as Scale mode. Its rightmost 7×3 block plays
+the first seven notes of the selected scale across three octaves. The lowest
+and most accessible row begins with the simplest major chord; complexity grows
+to the right within each family and upward across the board:
+
+| Family | Left-to-right presets |
+|---|---|
+| Advanced / jazz | Quartal, AugΔ7, Maj7♯11, MinΔ9, 13♭9, 13♯11, 7alt |
+| Diminished / altered | Dim, Dim7, ø7, Aug, 7♭5, 7♯5, DimΔ7 |
+| Dominant | Dom7, Dom9, Dom11, Dom13, 7♭9, 7♯9, 7♯11 |
+| Minor | Min, Min6, Min7, Min9, Min11, Min13, MinΔ7 |
+| Major | Maj, Maj6, Maj7, Maj9, Maj11, Maj13, Maj13♯11 |
+
+The two rows above the presets toggle scale-relative chord degrees 1–14. The
+default custom chord is `1·3·5`. Choosing a degree while a preset is selected
+starts a fresh custom chord containing only degree 1 and the chosen degree;
+degree 1 can then be removed for rootless voicings. When a root is held or
+latched, newly enabled degrees are added above its current highest tone and the
+MIDI chord is re-voiced immediately.
+
+The control row contains `INV`, `DROP`, `AUTO`, `OPEN`, `STR`, and `LATCH`:
+
+- `INV`, `DROP`, `OPEN`, and `STR` advance on release. Holding one for one
+  second resets it. Looping or resetting flashes its key and display glyph
+  three times with alternating 50 ms phases.
+- `DROP` cycles off, drop 2, drop 3, and drop 2+4 where the chord has enough
+  tones. `OPEN` provides three progressively wider voicings.
+- `STR` cycles off, 20/40/60 ms upward strums, then 20/40/60 ms downward
+  strums. Delayed note-ons are queued without blocking keyboard scanning.
+- `AUTO` chooses the inversion and octave placement with the least motion from
+  the previously played chord. `LATCH` holds a chord after release and replaces
+  it when the next root is played.
+
+Control changes temporarily replace the 7×3 root grid with a bottom-aligned
+3×5 glyph (`I`, `D`, `A`, `O`, `S`, or `L`). Multi-level controls use the six
+pixels above the glyph as a counter; color laps extend the counter beyond six.
+Their states use a separate rainbow palette. All resting, selected, root,
+pressed, and chord-tone LEDs use the currently selected five-color theme;
+selected presets and selected degrees share the full-intensity Quinary color.
+
 ## Settings
 
 Hold the top-right Settings key to open this 10×10 layout:
@@ -40,8 +83,6 @@ Hold the top-right Settings key to open this 10×10 layout:
 - The top-left two keys select the previous or next color palette. The new
   palette applies immediately, and its name scrolls through one complete pass
   before the previous root/scale display returns.
-- The next five top-row keys show the palette's primary through quinary colors
-  at full brightness, so the Settings view previews the actual keyboard theme.
 - The two scale rows contain 18 selections per page. Their rightmost keys move
   to the previous or next page and briefly show a 3×6 pixel arrow.
 - The lower-left 6×2 block selects the root: `C/C♯`, `D/D♯`, `E/F`, `F♯/G`,
@@ -88,11 +129,10 @@ starts with Terminal, E, and natural minor.
 
 While Settings is held, press the key immediately to its left to enter the
 latched layer-select page. Releasing Settings does not take you back. The first
-two keys there select Scale or Chord mode.
+two keys there also select Scale or Chord mode.
 
-Chord mode is intentionally an empty proof-of-concept placeholder. Its
-top-right key returns to the layer-select page; this is a direct layer change,
-not a hold or toggle.
+Both performance modes use the same direct Scale/Chord switches and momentary
+Settings key.
 
 ## Build locally
 
@@ -110,8 +150,8 @@ The resulting file is `keychron_c100_8k_midi_pad.bin` in this repository's
 root. GitHub Actions also builds the firmware after each push and publishes the
 binary through the repository workflow.
 
-The current build uses 61,302 bytes of the target's verified 128 KiB flash
-region (about 47%).
+The current build uses 65,706 bytes of the target's verified 128 KiB flash
+region (about 50%).
 
 ## Test MIDI after flashing
 
