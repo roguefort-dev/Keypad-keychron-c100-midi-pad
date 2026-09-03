@@ -76,11 +76,13 @@ enum custom_keycodes {
   MD_PALETTE_PREV,
   MD_PALETTE_NEXT,
   CH_INV,
+  CH_BASS,
   CH_DROP,
   CH_AUTO,
   CH_OPEN,
   CH_STRUM,
   CH_LATCH,
+  CH_QUANTIZE,
   CH_DEGREE_1,
   CH_DEGREE_2,
   CH_DEGREE_3,
@@ -157,8 +159,8 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
     [CHORD_LAYER] = LAYOUT_tkl_ansi(
         MD_OCTAVE_DOWN, MD_OCTAVE_UP, XXXXXXX, MD_SCALE, MD_CHORD, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, MD_SETTINGS,
-        XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
-        CH_INV, CH_DROP, CH_AUTO, CH_OPEN, CH_STRUM, CH_LATCH, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
+        CH_AUTO, CH_LATCH, CH_QUANTIZE, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
+        CH_INV, CH_BASS, CH_DROP, CH_OPEN, CH_STRUM, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
         CH_DEGREE_1, CH_DEGREE_2, CH_DEGREE_3, CH_DEGREE_4, CH_DEGREE_5, CH_DEGREE_6, CH_DEGREE_7, CH_ROOT, CH_ROOT, CH_ROOT,
         CH_DEGREE_8, CH_DEGREE_9, CH_DEGREE_10, CH_DEGREE_11, CH_DEGREE_12, CH_DEGREE_13, CH_DEGREE_14, CH_ROOT, CH_ROOT, CH_ROOT,
         CH_SHAPE_0, CH_SHAPE_1, CH_SHAPE_2, CH_SHAPE_3, CH_SHAPE_4, CH_SHAPE_5, CH_SHAPE_6, CH_ROOT, CH_ROOT, CH_ROOT,
@@ -217,9 +219,12 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 #define TEXT_SCROLL_HOLD_MS 400
 #define TEXT_SCROLL_STEP_MS 260
 #define PAGE_ARROW_MS 250
-#define SETTINGS_UNSELECTED_BRIGHTNESS 180
-#define PERFORMANCE_PAD_BRIGHTNESS 100
-#define PERFORMANCE_NAV_BRIGHTNESS 200
+#define DEFAULT_PAD_BRIGHTNESS 180
+#define ROOT_NOTE_BRIGHTNESS 225
+#define PRESSED_PAD_BRIGHTNESS 255
+#define SETTINGS_UNSELECTED_BRIGHTNESS DEFAULT_PAD_BRIGHTNESS
+#define PERFORMANCE_PAD_BRIGHTNESS DEFAULT_PAD_BRIGHTNESS
+#define PERFORMANCE_NAV_BRIGHTNESS DEFAULT_PAD_BRIGHTNESS
 #define MIDI_PAD_CONFIG_VERSION 0xA2
 #define CHORD_ROOT_FIRST_ROW 3
 #define CHORD_ROOT_FIRST_COL 7
@@ -228,22 +233,31 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 #define CHORD_ROOT_SLOT_COUNT (CHORD_ROOT_ROW_COUNT * CHORD_ROOT_COL_COUNT)
 #define CHORD_DEGREE_COUNT 14
 #define CHORD_PRESET_COUNT 35
-#define CHORD_MAX_TONES 14
+#define CHORD_MAX_TONES 15
 #define CHORD_PENDING_EVENT_COUNT 64
 #define CHORD_CONTROL_HOLD_MS 1000
 #define CHORD_DISPLAY_MS 450
 #define CHORD_RESET_DISPLAY_MS 350
 #define CHORD_RESET_FLASH_MS 300
 #define CHORD_RESET_FLASH_STEP_MS 50
-#define CHORD_CONTROL_BRIGHTNESS 200
-#define CHORD_IDLE_BRIGHTNESS 100
+#define CHORD_CONTROL_BRIGHTNESS DEFAULT_PAD_BRIGHTNESS
+#define CHORD_IDLE_BRIGHTNESS DEFAULT_PAD_BRIGHTNESS
 
 enum chord_control {
   CHORD_CONTROL_INVERSION,
+  CHORD_CONTROL_BASS,
   CHORD_CONTROL_DROP,
   CHORD_CONTROL_OPEN,
   CHORD_CONTROL_STRUM,
+  CHORD_CONTROL_QUANTIZE,
   CHORD_CONTROL_COUNT,
+};
+
+enum chord_quantize_mode {
+  CHORD_QUANTIZE_OFF,
+  CHORD_QUANTIZE_UP,
+  CHORD_QUANTIZE_DOWN,
+  CHORD_QUANTIZE_COUNT,
 };
 
 typedef struct {
@@ -257,6 +271,7 @@ typedef struct {
   uint8_t note_count;
   uint8_t notes[CHORD_MAX_TONES];
   uint16_t sent_mask;
+  uint16_t alternate_mask;
 } active_chord_t;
 
 typedef struct {
@@ -535,9 +550,11 @@ static uint16_t custom_degree_mask = (1U << 0) | (1U << 2) | (1U << 4);
 static uint8_t custom_degree_octave_lifts[CHORD_DEGREE_COUNT];
 static int8_t selected_chord_shape = -1;
 static uint8_t chord_inversion = 0;
+static uint8_t chord_bass = 0;
 static uint8_t chord_drop = 0;
 static uint8_t chord_open = 0;
 static uint8_t chord_strum = 0;
+static uint8_t chord_quantize = CHORD_QUANTIZE_OFF;
 static bool chord_auto = false;
 static bool chord_latch = false;
 static uint32_t chord_control_press_timer[CHORD_CONTROL_COUNT];
@@ -705,6 +722,7 @@ static void release_tracked_notes(void) {
     active_chords[slot].active = false;
     active_chords[slot].note_count = 0;
     active_chords[slot].sent_mask = 0;
+    active_chords[slot].alternate_mask = 0;
   }
   for (uint8_t event = 0; event < CHORD_PENDING_EVENT_COUNT; ++event) {
     pending_chord_notes[event].active = false;
@@ -742,6 +760,63 @@ static uint8_t chord_scale_degree_for_note(uint8_t note) {
     }
   }
   return 0;
+}
+
+static bool note_is_in_selected_scale(uint8_t note) {
+  const uint8_t note_count =
+      pgm_read_byte(&scale_definitions[selected_scale].note_count);
+  const uint8_t relative_pitch =
+      (note + PITCH_CLASS_COUNT - root_pitch_class) % PITCH_CLASS_COUNT;
+  for (uint8_t degree = 0; degree < note_count; ++degree) {
+    if (pgm_read_byte(&scale_definitions[selected_scale].intervals[degree]) ==
+        relative_pitch) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void nearest_scale_notes(uint8_t note, uint8_t *lower,
+                                uint8_t *upper, uint8_t *lower_distance,
+                                uint8_t *upper_distance) {
+  *lower = note;
+  *upper = note;
+  *lower_distance = UINT8_MAX;
+  *upper_distance = UINT8_MAX;
+  for (uint8_t distance = 1; distance <= PITCH_CLASS_COUNT; ++distance) {
+    if (*lower_distance == UINT8_MAX && note >= distance &&
+        note_is_in_selected_scale(note - distance)) {
+      *lower = note - distance;
+      *lower_distance = distance;
+    }
+    if (*upper_distance == UINT8_MAX && note <= MIDI_MAX_NOTE - distance &&
+        note_is_in_selected_scale(note + distance)) {
+      *upper = note + distance;
+      *upper_distance = distance;
+    }
+    if (*lower_distance != UINT8_MAX && *upper_distance != UINT8_MAX) {
+      return;
+    }
+  }
+}
+
+static uint8_t quantize_chord_note(uint8_t note) {
+  if (chord_quantize == CHORD_QUANTIZE_OFF ||
+      note_is_in_selected_scale(note)) {
+    return note;
+  }
+  uint8_t lower;
+  uint8_t upper;
+  uint8_t lower_distance;
+  uint8_t upper_distance;
+  nearest_scale_notes(note, &lower, &upper, &lower_distance, &upper_distance);
+  if (lower_distance < upper_distance) {
+    return lower;
+  }
+  if (upper_distance < lower_distance) {
+    return upper;
+  }
+  return chord_quantize == CHORD_QUANTIZE_UP ? upper : lower;
 }
 
 static int16_t chord_note_for_degree(uint8_t root_note,
@@ -811,6 +886,27 @@ static void apply_chord_open(int16_t *tones, uint8_t count) {
   sort_chord_tones(tones, count);
 }
 
+static uint8_t append_chord_bass(int16_t *tones, uint8_t count,
+                                 uint8_t root_note) {
+  if (chord_bass == 0 || count >= CHORD_MAX_TONES) {
+    return count;
+  }
+
+  const int16_t bass_note = root_note - (chord_bass * 12);
+  if (bass_note < 0 || bass_note > MIDI_MAX_NOTE) {
+    return count;
+  }
+  for (uint8_t index = 0; index < count; ++index) {
+    if (tones[index] == bass_note) {
+      return count;
+    }
+  }
+
+  tones[count++] = bass_note;
+  sort_chord_tones(tones, count);
+  return count;
+}
+
 static uint16_t chord_distance(uint8_t left, uint8_t right) {
   return left > right ? left - right : right - left;
 }
@@ -819,8 +915,17 @@ static uint16_t score_chord_voice(const int16_t *tones, uint8_t count) {
   if (previous_chord_note_count == 0) {
     return 0;
   }
-  uint16_t score = 0;
-  for (uint8_t index = 0; index < count; ++index) {
+  const uint8_t shared_count =
+      count < previous_chord_note_count ? count : previous_chord_note_count;
+  uint16_t score = chord_distance(count, previous_chord_note_count) * 12;
+  for (uint8_t index = 0; index < shared_count; ++index) {
+    score += chord_distance(clamp_midi_note(tones[index]),
+                            previous_chord_notes[index]);
+  }
+
+  // Extra voices retain octave-sensitive nearest-neighbor scoring while the
+  // shared voices remain paired low-to-high.
+  for (uint8_t index = shared_count; index < count; ++index) {
     uint16_t nearest = UINT16_MAX;
     for (uint8_t previous = 0; previous < previous_chord_note_count;
          ++previous) {
@@ -833,7 +938,6 @@ static uint16_t score_chord_voice(const int16_t *tones, uint8_t count) {
     }
     score += nearest;
   }
-  score += chord_distance(count, previous_chord_note_count) * 12;
   return score;
 }
 
@@ -851,8 +955,11 @@ static uint8_t current_chord_tone_count(void) {
   return count;
 }
 
-static uint8_t build_chord_notes(uint8_t root_note, uint8_t *output) {
+static uint8_t build_chord_notes(uint8_t root_note, uint8_t *output,
+                                 uint16_t *alternate_mask) {
   int16_t base[CHORD_MAX_TONES];
+  uint8_t altered_notes[CHORD_MAX_TONES];
+  uint8_t altered_count = 0;
   uint8_t count = 0;
 
   if (selected_chord_shape >= 0) {
@@ -875,6 +982,7 @@ static uint8_t build_chord_notes(uint8_t root_note, uint8_t *output) {
   if (chord_auto && previous_chord_note_count > 0 && count > 0) {
     uint16_t best_score = UINT16_MAX;
     int16_t best[CHORD_MAX_TONES];
+    uint8_t best_count = 0;
     for (uint8_t inversion = 0; inversion < count; ++inversion) {
       int16_t candidate[CHORD_MAX_TONES];
       for (uint8_t index = 0; index < count; ++index) {
@@ -883,29 +991,32 @@ static uint8_t build_chord_notes(uint8_t root_note, uint8_t *output) {
       apply_chord_inversion(candidate, count, inversion);
       apply_chord_drop(candidate, count);
       apply_chord_open(candidate, count);
+      const uint8_t candidate_count =
+          append_chord_bass(candidate, count, root_note);
 
-      for (int8_t octave = -2; octave <= 2; ++octave) {
-        int16_t shifted[CHORD_MAX_TONES];
-        bool valid = true;
-        for (uint8_t index = 0; index < count; ++index) {
-          shifted[index] = candidate[index] + (octave * 12);
-          if (shifted[index] < 0 || shifted[index] > MIDI_MAX_NOTE) {
-            valid = false;
-          }
+      // The selected root pad is a hard register anchor. Auto chooses an
+      // inversion but never silently moves the entire voicing to another
+      // octave; the three root columns remain meaningful and predictable.
+      bool valid = true;
+      for (uint8_t index = 0; index < candidate_count; ++index) {
+        if (candidate[index] < 0 || candidate[index] > MIDI_MAX_NOTE) {
+          valid = false;
         }
-        if (!valid) {
-          continue;
-        }
-        const uint16_t score = score_chord_voice(shifted, count);
-        if (score < best_score) {
-          best_score = score;
-          for (uint8_t index = 0; index < count; ++index) {
-            best[index] = shifted[index];
-          }
+      }
+      if (!valid) {
+        continue;
+      }
+      const uint16_t score = score_chord_voice(candidate, candidate_count);
+      if (score < best_score) {
+        best_score = score;
+        best_count = candidate_count;
+        for (uint8_t index = 0; index < candidate_count; ++index) {
+          best[index] = candidate[index];
         }
       }
     }
     if (best_score != UINT16_MAX) {
+      count = best_count;
       for (uint8_t index = 0; index < count; ++index) {
         base[index] = best[index];
       }
@@ -915,14 +1026,32 @@ static uint8_t build_chord_notes(uint8_t root_note, uint8_t *output) {
                           count == 0 ? 0 : chord_inversion % count);
     apply_chord_drop(base, count);
     apply_chord_open(base, count);
+    count = append_chord_bass(base, count, root_note);
+  }
+
+  for (uint8_t index = 0; index < count; ++index) {
+    const uint8_t source_note = clamp_midi_note(base[index]);
+    if (!note_is_in_selected_scale(source_note)) {
+      const uint8_t quantized_note = quantize_chord_note(source_note);
+      base[index] = quantized_note;
+      altered_notes[altered_count++] = quantized_note;
+    }
   }
 
   sort_chord_tones(base, count);
+  *alternate_mask = 0;
   uint8_t unique_count = 0;
   for (uint8_t index = 0; index < count; ++index) {
     const uint8_t note = clamp_midi_note(base[index]);
     if (unique_count == 0 || output[unique_count - 1] != note) {
-      output[unique_count++] = note;
+      output[unique_count] = note;
+      for (uint8_t altered = 0; altered < altered_count; ++altered) {
+        if (altered_notes[altered] == note) {
+          *alternate_mask |= (1U << unique_count);
+          break;
+        }
+      }
+      ++unique_count;
     }
   }
   return unique_count;
@@ -948,6 +1077,7 @@ static void stop_chord_slot(uint8_t slot) {
   chord->active = false;
   chord->note_count = 0;
   chord->sent_mask = 0;
+  chord->alternate_mask = 0;
 }
 
 static void stop_all_chord_slots(void) {
@@ -992,7 +1122,8 @@ static void start_chord_slot(uint8_t slot, uint8_t root_note) {
   stop_chord_slot(slot);
   chord->active = true;
   chord->root_note = root_note;
-  chord->note_count = build_chord_notes(root_note, chord->notes);
+  chord->note_count =
+      build_chord_notes(root_note, chord->notes, &chord->alternate_mask);
   chord->sent_mask = 0;
 
   const uint8_t delay = chord_strum_delay();
@@ -1132,7 +1263,8 @@ static void start_chord_reset_flash(enum chord_control control, char glyph) {
 }
 
 static char chord_control_glyph(enum chord_control control) {
-  static const char glyphs[CHORD_CONTROL_COUNT] = {'I', 'D', 'O', 'S'};
+  static const char glyphs[CHORD_CONTROL_COUNT] = {'I', 'B', 'D',
+                                                   'O', 'S', 'Q'};
   return glyphs[control];
 }
 
@@ -1148,6 +1280,11 @@ static void cycle_chord_control(enum chord_control control) {
     looped = level == 0;
     break;
   }
+  case CHORD_CONTROL_BASS:
+    chord_bass = (chord_bass + 1) % 3;
+    level = chord_bass;
+    looped = level == 0;
+    break;
   case CHORD_CONTROL_DROP: {
     const uint8_t tones = current_chord_tone_count();
     const uint8_t count = tones < 4 ? tones : 4;
@@ -1164,6 +1301,11 @@ static void cycle_chord_control(enum chord_control control) {
   case CHORD_CONTROL_STRUM:
     chord_strum = (chord_strum + 1) % 7;
     level = chord_strum;
+    looped = level == 0;
+    break;
+  case CHORD_CONTROL_QUANTIZE:
+    chord_quantize = (chord_quantize + 1) % CHORD_QUANTIZE_COUNT;
+    level = chord_quantize;
     looped = level == 0;
     break;
   default:
@@ -1185,6 +1327,9 @@ static void reset_chord_control(enum chord_control control) {
     chord_auto = false;
     chord_inversion = 0;
     break;
+  case CHORD_CONTROL_BASS:
+    chord_bass = 0;
+    break;
   case CHORD_CONTROL_DROP:
     chord_drop = 0;
     break;
@@ -1193,6 +1338,9 @@ static void reset_chord_control(enum chord_control control) {
     break;
   case CHORD_CONTROL_STRUM:
     chord_strum = 0;
+    break;
+  case CHORD_CONTROL_QUANTIZE:
+    chord_quantize = CHORD_QUANTIZE_OFF;
     break;
   default:
     break;
@@ -1368,6 +1516,10 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     process_chord_control(CHORD_CONTROL_INVERSION, record->event.pressed);
     return false;
 
+  case CH_BASS:
+    process_chord_control(CHORD_CONTROL_BASS, record->event.pressed);
+    return false;
+
   case CH_DROP:
     process_chord_control(CHORD_CONTROL_DROP, record->event.pressed);
     return false;
@@ -1378,6 +1530,10 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 
   case CH_STRUM:
     process_chord_control(CHORD_CONTROL_STRUM, record->event.pressed);
+    return false;
+
+  case CH_QUANTIZE:
+    process_chord_control(CHORD_CONTROL_QUANTIZE, record->event.pressed);
     return false;
 
   case CH_AUTO:
@@ -1539,17 +1695,21 @@ static void render_root_preview(void) {
   for (uint8_t row = 0; row < DISPLAY_HEIGHT; ++row) {
     for (uint8_t col = 0; col < GLYPH_WIDTH; ++col) {
       if (font_pixel(letter, row, col)) {
-        draw_font_pixel(row, col, COLOR_TERTIARY, 255);
+        draw_font_pixel(row, col, COLOR_TERTIARY, ROOT_NOTE_BRIGHTNESS);
       }
     }
   }
 
   if (is_black_key(root_pitch_class)) {
     // One blank column separates the 3x6 letter from this 2x2 marker.
-    set_key_color(DISPLAY_ROW, DISPLAY_COL + 4, COLOR_SECONDARY, 255);
-    set_key_color(DISPLAY_ROW, DISPLAY_COL + 5, COLOR_SECONDARY, 255);
-    set_key_color(DISPLAY_ROW + 1, DISPLAY_COL + 4, COLOR_SECONDARY, 255);
-    set_key_color(DISPLAY_ROW + 1, DISPLAY_COL + 5, COLOR_SECONDARY, 255);
+    set_key_color(DISPLAY_ROW, DISPLAY_COL + 4, COLOR_SECONDARY,
+                  DEFAULT_PAD_BRIGHTNESS);
+    set_key_color(DISPLAY_ROW, DISPLAY_COL + 5, COLOR_SECONDARY,
+                  DEFAULT_PAD_BRIGHTNESS);
+    set_key_color(DISPLAY_ROW + 1, DISPLAY_COL + 4, COLOR_SECONDARY,
+                  DEFAULT_PAD_BRIGHTNESS);
+    set_key_color(DISPLAY_ROW + 1, DISPLAY_COL + 5, COLOR_SECONDARY,
+                  DEFAULT_PAD_BRIGHTNESS);
   }
 }
 
@@ -1573,7 +1733,8 @@ static void render_scrolling_text(void) {
     const char letter = text_character(text_scroll_source, letter_index);
     for (uint8_t row = 0; row < DISPLAY_HEIGHT; ++row) {
       if (font_pixel(letter, row, glyph_col)) {
-        draw_font_pixel(row, view_col, COLOR_TERTIARY, 255);
+        draw_font_pixel(row, view_col, COLOR_TERTIARY,
+                        DEFAULT_PAD_BRIGHTNESS);
       }
     }
   }
@@ -1590,7 +1751,8 @@ static void render_page_arrow(void) {
     const uint8_t row_bits = pgm_read_byte(&arrows[arrow_index][row]);
     for (uint8_t col = 0; col < GLYPH_WIDTH; ++col) {
       if (row_bits & (0x80 >> col)) {
-        draw_font_pixel(row, col, COLOR_QUATERNARY, 255);
+        draw_font_pixel(row, col, COLOR_QUATERNARY,
+                        DEFAULT_PAD_BRIGHTNESS);
       }
     }
   }
@@ -1601,7 +1763,7 @@ static void set_root_selector_led(uint8_t pitch_class) {
   const uint8_t col = pitch_class % 2;
   const uint8_t led = led_index(row, col);
   if (pitch_class == root_pitch_class) {
-    set_palette_color(led, COLOR_TERTIARY, 255);
+    set_palette_color(led, COLOR_TERTIARY, ROOT_NOTE_BRIGHTNESS);
   } else {
     set_palette_color(led, COLOR_PRIMARY, SETTINGS_UNSELECTED_BRIGHTNESS);
   }
@@ -1616,7 +1778,7 @@ static void set_scale_selector_led(uint8_t slot) {
   const uint8_t row = 1 + (slot / 9);
   const uint8_t col = slot % 9;
   if (scale == selected_scale) {
-    set_key_color(row, col, COLOR_SECONDARY, 255);
+    set_key_color(row, col, COLOR_SECONDARY, DEFAULT_PAD_BRIGHTNESS);
   } else {
     set_key_color(row, col, COLOR_PRIMARY, SETTINGS_UNSELECTED_BRIGHTNESS);
   }
@@ -1632,16 +1794,22 @@ static void render_settings_layer(void) {
   clear_all_leds();
   update_display_timers();
 
-  set_key_color(0, 0, COLOR_QUATERNARY, 255); // Previous palette
-  set_key_color(0, 1, COLOR_QUINARY, 255);    // Next palette
-  set_key_color(0, 8, COLOR_QUINARY, 255);    // Layer select
-  set_key_color(0, 9, COLOR_QUATERNARY, 255); // Held Settings key
+  set_key_color(0, 0, COLOR_QUATERNARY,
+                DEFAULT_PAD_BRIGHTNESS); // Previous palette
+  set_key_color(0, 1, COLOR_QUINARY,
+                DEFAULT_PAD_BRIGHTNESS); // Next palette
+  set_key_color(0, 8, COLOR_QUINARY,
+                DEFAULT_PAD_BRIGHTNESS); // Layer select
+  set_key_color(0, 9, COLOR_QUATERNARY,
+                DEFAULT_PAD_BRIGHTNESS); // Settings
 
   for (uint8_t slot = 0; slot < SCALE_PAGE_SIZE; ++slot) {
     set_scale_selector_led(slot);
   }
-  set_key_color(1, 9, COLOR_QUATERNARY, 255); // Page up
-  set_key_color(2, 9, COLOR_QUINARY, 255);    // Page down
+  set_key_color(1, 9, COLOR_QUATERNARY,
+                DEFAULT_PAD_BRIGHTNESS); // Page up
+  set_key_color(2, 9, COLOR_QUINARY,
+                DEFAULT_PAD_BRIGHTNESS); // Page down
 
   for (uint8_t pitch_class = 0; pitch_class < PITCH_CLASS_COUNT;
        ++pitch_class) {
@@ -1664,10 +1832,10 @@ static void render_performance_top_row(enum layers active_layer) {
                 PERFORMANCE_NAV_BRIGHTNESS); // Octave up
   set_key_color(0, 3,
                 active_layer == SCALE_LAYER ? COLOR_TERTIARY : COLOR_PRIMARY,
-                active_layer == SCALE_LAYER ? 255 : PERFORMANCE_NAV_BRIGHTNESS);
+                PERFORMANCE_NAV_BRIGHTNESS);
   set_key_color(0, 4,
                 active_layer == CHORD_LAYER ? COLOR_TERTIARY : COLOR_PRIMARY,
-                active_layer == CHORD_LAYER ? 255 : PERFORMANCE_NAV_BRIGHTNESS);
+                PERFORMANCE_NAV_BRIGHTNESS);
   set_key_color(0, 9, COLOR_QUATERNARY,
                 PERFORMANCE_NAV_BRIGHTNESS); // Settings
 }
@@ -1681,9 +1849,9 @@ static void render_scale_layer(void) {
       const uint8_t note = note_for_position(row, col);
       const uint8_t led = led_index(row, col);
       if (active_note_counts[note] > 0) {
-        set_palette_color(led, COLOR_SECONDARY, 255);
+        set_palette_color(led, COLOR_SECONDARY, PRESSED_PAD_BRIGHTNESS);
       } else if (note % PITCH_CLASS_COUNT == root_pitch_class) {
-        set_palette_color(led, COLOR_TERTIARY, 255);
+        set_palette_color(led, COLOR_TERTIARY, ROOT_NOTE_BRIGHTNESS);
       } else {
         set_palette_color(led, COLOR_PRIMARY, PERFORMANCE_PAD_BRIGHTNESS);
       }
@@ -1692,31 +1860,39 @@ static void render_scale_layer(void) {
 }
 
 static uint8_t chord_glyph_row(char glyph, uint8_t row) {
-  static const uint8_t PROGMEM glyphs[6][5] = {
-      // I, D, A, O, S, L. Bits 7..5 are left to right.
+  static const uint8_t PROGMEM glyphs[8][5] = {
+      // I, B, D, A, O, S, L, Q. Bits 7..5 are left to right.
       {0xE0, 0x40, 0x40, 0x40, 0xE0},
+      {0xC0, 0xA0, 0xC0, 0xA0, 0xC0},
       {0xC0, 0xA0, 0xA0, 0xA0, 0xC0},
       {0x40, 0xA0, 0xE0, 0xA0, 0xA0},
       {0xE0, 0xA0, 0xA0, 0xA0, 0xE0},
       {0xE0, 0x80, 0xE0, 0x20, 0xE0},
       {0x80, 0x80, 0x80, 0x80, 0xE0},
+      {0x40, 0xA0, 0xA0, 0xE0, 0x60},
   };
   uint8_t glyph_index = 0;
   switch (glyph) {
-  case 'D':
+  case 'B':
     glyph_index = 1;
     break;
-  case 'A':
+  case 'D':
     glyph_index = 2;
     break;
-  case 'O':
+  case 'A':
     glyph_index = 3;
     break;
-  case 'S':
+  case 'O':
     glyph_index = 4;
     break;
-  case 'L':
+  case 'S':
     glyph_index = 5;
+    break;
+  case 'L':
+    glyph_index = 6;
+    break;
+  case 'Q':
+    glyph_index = 7;
     break;
   default:
     break;
@@ -1728,27 +1904,39 @@ static uint8_t chord_control_level(enum chord_control control) {
   switch (control) {
   case CHORD_CONTROL_INVERSION:
     return chord_inversion;
+  case CHORD_CONTROL_BASS:
+    return chord_bass;
   case CHORD_CONTROL_DROP:
     return chord_drop;
   case CHORD_CONTROL_OPEN:
     return chord_open;
   case CHORD_CONTROL_STRUM:
     return chord_strum;
+  case CHORD_CONTROL_QUANTIZE:
+    return chord_quantize;
   default:
     return 0;
   }
+}
+
+static uint8_t chord_control_row(enum chord_control control) {
+  return control == CHORD_CONTROL_QUANTIZE ? 1 : 2;
 }
 
 static uint8_t chord_control_col(enum chord_control control) {
   switch (control) {
   case CHORD_CONTROL_INVERSION:
     return 0;
-  case CHORD_CONTROL_DROP:
+  case CHORD_CONTROL_BASS:
     return 1;
+  case CHORD_CONTROL_DROP:
+    return 2;
   case CHORD_CONTROL_OPEN:
     return 3;
   case CHORD_CONTROL_STRUM:
     return 4;
+  case CHORD_CONTROL_QUANTIZE:
+    return 2;
   default:
     return 0;
   }
@@ -1776,25 +1964,30 @@ static void update_chord_display_timers(void) {
 
 static void render_chord_controls(void) {
   for (uint8_t control = 0; control < CHORD_CONTROL_COUNT; ++control) {
+    const uint8_t row = chord_control_row(control);
     const uint8_t col = chord_control_col(control);
     if (chord_reset_flash_control == control) {
       if (chord_reset_flash_is_on()) {
-        set_key_color(2, col, COLOR_QUINARY, 255);
+        set_key_color(row, col, COLOR_QUINARY, 255);
       }
       continue;
     }
     const uint8_t level = chord_control_level(control);
     if (level > 0) {
-      set_chord_state_color(2, col, level, 255);
+      if (control == CHORD_CONTROL_QUANTIZE) {
+        set_key_color(row, col, COLOR_SECONDARY, CHORD_CONTROL_BRIGHTNESS);
+      } else {
+        set_chord_state_color(row, col, level, CHORD_CONTROL_BRIGHTNESS);
+      }
     } else {
-      set_key_color(2, col, COLOR_PRIMARY, CHORD_CONTROL_BRIGHTNESS);
+      set_key_color(row, col, COLOR_PRIMARY, CHORD_CONTROL_BRIGHTNESS);
     }
   }
 
-  set_key_color(2, 2, chord_auto ? COLOR_SECONDARY : COLOR_PRIMARY,
-                chord_auto ? 255 : CHORD_CONTROL_BRIGHTNESS);
-  set_key_color(2, 5, chord_latch ? COLOR_SECONDARY : COLOR_PRIMARY,
-                chord_latch ? 255 : CHORD_CONTROL_BRIGHTNESS);
+  set_key_color(1, 0, chord_auto ? COLOR_SECONDARY : COLOR_PRIMARY,
+                CHORD_CONTROL_BRIGHTNESS);
+  set_key_color(1, 1, chord_latch ? COLOR_SECONDARY : COLOR_PRIMARY,
+                CHORD_CONTROL_BRIGHTNESS);
 }
 
 static void render_chord_degrees(void) {
@@ -1803,7 +1996,7 @@ static void render_chord_degrees(void) {
     const uint8_t col = degree % 7;
     if (selected_chord_shape < 0 &&
         (custom_degree_mask & (1U << degree))) {
-      set_key_color(row, col, COLOR_QUINARY, 255);
+      set_key_color(row, col, COLOR_QUINARY, DEFAULT_PAD_BRIGHTNESS);
     } else {
       set_key_color(row, col, COLOR_QUATERNARY, CHORD_IDLE_BRIGHTNESS);
     }
@@ -1814,9 +2007,10 @@ static void render_chord_shapes(void) {
   for (uint8_t shape = 0; shape < CHORD_PRESET_COUNT; ++shape) {
     const uint8_t row = 5 + (shape / 7);
     const uint8_t col = shape % 7;
-    set_key_color(row, col, COLOR_QUINARY,
-                  selected_chord_shape == shape ? 255
-                                                : CHORD_IDLE_BRIGHTNESS);
+    set_key_color(row, col,
+                  selected_chord_shape == shape ? COLOR_QUINARY
+                                                : COLOR_PRIMARY,
+                  CHORD_IDLE_BRIGHTNESS);
   }
 }
 
@@ -1835,17 +2029,50 @@ static bool note_is_an_active_chord_tone(uint8_t note) {
   return false;
 }
 
+static bool note_is_an_alternate_indicator(uint8_t note) {
+  if (chord_quantize != CHORD_QUANTIZE_OFF) {
+    return false;
+  }
+  for (uint8_t slot = 0; slot < CHORD_ROOT_SLOT_COUNT; ++slot) {
+    const active_chord_t *chord = &active_chords[slot];
+    if (!chord->active) {
+      continue;
+    }
+    for (uint8_t index = 0; index < chord->note_count; ++index) {
+      if (!(chord->alternate_mask & (1U << index))) {
+        continue;
+      }
+      const uint8_t altered_note = chord->notes[index];
+      uint8_t lower;
+      uint8_t upper;
+      uint8_t lower_distance;
+      uint8_t upper_distance;
+      nearest_scale_notes(altered_note, &lower, &upper, &lower_distance,
+                          &upper_distance);
+      const uint8_t nearest_distance =
+          lower_distance < upper_distance ? lower_distance : upper_distance;
+      if ((note == lower && lower_distance == nearest_distance) ||
+          (note == upper && upper_distance == nearest_distance)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 static void render_chord_root_grid(void) {
   for (uint8_t row = CHORD_ROOT_FIRST_ROW; row < MATRIX_ROWS; ++row) {
     for (uint8_t col = CHORD_ROOT_FIRST_COL; col < MATRIX_COLS; ++col) {
       const uint8_t note = chord_root_note_for_position(row, col);
       const uint8_t slot = chord_root_slot(row, col);
       if (active_chords[slot].active) {
-        set_key_color(row, col, COLOR_SECONDARY, 255);
+        set_key_color(row, col, COLOR_SECONDARY, PRESSED_PAD_BRIGHTNESS);
+      } else if (note_is_an_alternate_indicator(note)) {
+        set_key_color(row, col, COLOR_QUATERNARY, DEFAULT_PAD_BRIGHTNESS);
       } else if (note_is_an_active_chord_tone(note)) {
-        set_key_color(row, col, COLOR_QUINARY, 255);
+        set_key_color(row, col, COLOR_QUINARY, DEFAULT_PAD_BRIGHTNESS);
       } else if (note % PITCH_CLASS_COUNT == root_pitch_class) {
-        set_key_color(row, col, COLOR_TERTIARY, 255);
+        set_key_color(row, col, COLOR_TERTIARY, ROOT_NOTE_BRIGHTNESS);
       } else {
         set_key_color(row, col, COLOR_PRIMARY, CHORD_IDLE_BRIGHTNESS);
       }
@@ -1869,7 +2096,8 @@ static void render_chord_parameter_display(void) {
       }
       if (lap >= 0) {
         set_chord_state_color(CHORD_ROOT_FIRST_ROW + (dot / 3),
-                              CHORD_ROOT_FIRST_COL + (dot % 3), lap + 1, 255);
+                              CHORD_ROOT_FIRST_COL + (dot % 3), lap + 1,
+                              DEFAULT_PAD_BRIGHTNESS);
       }
     }
   }
@@ -1890,11 +2118,13 @@ static void render_chord_parameter_display(void) {
       } else if (binary) {
         set_key_color(row, physical_col,
                       chord_display_level ? COLOR_SECONDARY : COLOR_PRIMARY,
-                      255);
+                      DEFAULT_PAD_BRIGHTNESS);
       } else if (chord_display_level > 0) {
-        set_chord_state_color(row, physical_col, chord_display_level, 255);
+        set_chord_state_color(row, physical_col, chord_display_level,
+                              DEFAULT_PAD_BRIGHTNESS);
       } else {
-        set_key_color(row, physical_col, COLOR_PRIMARY, 255);
+        set_key_color(row, physical_col, COLOR_PRIMARY,
+                      DEFAULT_PAD_BRIGHTNESS);
       }
     }
   }
@@ -1916,8 +2146,19 @@ static void render_chord_layer(void) {
 
 static void render_layer_select(void) {
   clear_all_leds();
-  set_key_color(0, 0, COLOR_PRIMARY, 255);   // Scale
-  set_key_color(0, 1, COLOR_SECONDARY, 255); // Chord placeholder
+  set_key_color(0, 0, COLOR_PRIMARY, DEFAULT_PAD_BRIGHTNESS); // Scale
+  set_key_color(0, 1, COLOR_SECONDARY,
+                DEFAULT_PAD_BRIGHTNESS); // Chord placeholder
+}
+
+static void render_physically_pressed_keys(void) {
+  for (uint8_t row = 0; row < MATRIX_ROWS; ++row) {
+    for (uint8_t col = 0; col < MATRIX_COLS; ++col) {
+      if (matrix_is_on(row, col)) {
+        set_key_color(row, col, COLOR_SECONDARY, PRESSED_PAD_BRIGHTNESS);
+      }
+    }
+  }
 }
 
 bool rgb_matrix_indicators_user(void) {
@@ -1935,5 +2176,6 @@ bool rgb_matrix_indicators_user(void) {
     render_scale_layer();
     break;
   }
+  render_physically_pressed_keys();
   return false;
 }

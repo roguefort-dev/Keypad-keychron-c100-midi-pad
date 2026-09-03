@@ -28,10 +28,10 @@ deliberately places duplicate notes around the grid.
 - Fixed channel: 1
 - Octave range: −2 to +2
 
-At rest, the playable grid uses only two palette colors: one for every ordinary
-note and one full-intensity color for every root note. Pressing a note changes
+At rest, the playable grid uses only two palette colors: ordinary pads at
+brightness 180 and root notes at brightness 225. Pressing a note changes
 every pad that represents that exact MIDI note—including its duplicates—to the
-palette's full-intensity pressed color. Releasing the final duplicate restores
+palette's pressed color at brightness 255. Releasing the final duplicate restores
 the two-color resting state.
 
 ## Chord performance layer
@@ -56,25 +56,42 @@ degree 1 can then be removed for rootless voicings. When a root is held or
 latched, newly enabled degrees are added above its current highest tone and the
 MIDI chord is re-voiced immediately.
 
-The control row contains `INV`, `DROP`, `AUTO`, `OPEN`, `STR`, and `LATCH`:
+Fixed presets keep their literal chromatic intervals even when a chord contains
+notes outside the selected scale. For example, the Maj preset on E always sends
+`E–G♯–B`, including G♯ while E natural minor is selected.
 
-- `INV`, `DROP`, `OPEN`, and `STR` advance on release. Holding one for one
+The controls occupy two left-aligned rows. The upper row groups `AUTO`, `LATCH`,
+and `QNT`; the row below contains `INV`, `BASS`, `DROP`, `OPEN`, and `STR`:
+
+- `INV`, `BASS`, `DROP`, `OPEN`, and `STR` advance on release. Holding one for one
   second resets it. Looping or resetting flashes its key and display glyph
   three times with alternating 50 ms phases.
+- `BASS` cycles Off → root at −1 octave → root at −2 octaves → Off. It adds a
+  low root voice without moving the selected root pad or the rest of the chord.
 - `DROP` cycles off, drop 2, drop 3, and drop 2+4 where the chord has enough
   tones. `OPEN` provides three progressively wider voicings.
 - `STR` cycles off, 20/40/60 ms upward strums, then 20/40/60 ms downward
   strums. Delayed note-ons are queued without blocking keyboard scanning.
-- `AUTO` chooses the inversion and octave placement with the least motion from
-  the previously played chord. `LATCH` holds a chord after release and replaces
-  it when the next root is played.
+- `AUTO` pairs voices low-to-high and chooses the inversion with the least
+  octave-aware motion from the previously played chord. The root pad's octave
+  remains a hard register anchor; Auto never silently shifts the whole voicing
+  to another octave. `LATCH` holds a chord after release and replaces it when
+  the next root is played.
+- `QNT` cycles Off → nearest note with upward tie-break → nearest note with
+  downward tie-break → Off. Distance always wins; direction matters only when
+  the two neighboring scale notes are equally close. With QNT off, an
+  out-of-scale tone remains chromatic and lights its nearest scale-position LED
+  in the theme's Quaternary color (both neighbors light on an exact tie).
+  Quantized tones use the ordinary in-scale chord-tone color.
 
 Control changes temporarily replace the 7×3 root grid with a bottom-aligned
-3×5 glyph (`I`, `D`, `A`, `O`, `S`, or `L`). Multi-level controls use the six
+3×5 glyph (`I`, `B`, `D`, `A`, `O`, `S`, `L`, or `Q`). Multi-level controls use the six
 pixels above the glyph as a counter; color laps extend the counter beyond six.
-Their states use a separate rainbow palette. All resting, selected, root,
-pressed, and chord-tone LEDs use the currently selected five-color theme;
-selected presets and selected degrees share the full-intensity Quinary color.
+The stepped voicing controls use a separate rainbow palette. Enabled `AUTO`,
+`LATCH`, and `QNT` use the theme's Secondary color at the normal brightness of
+180, so they remain distinct from a 255-brightness physical press. All resting,
+selected, root, pressed, and chord-tone LEDs use the currently selected
+five-color theme.
 
 ## Settings
 
@@ -150,7 +167,7 @@ The resulting file is `keychron_c100_8k_midi_pad.bin` in this repository's
 root. GitHub Actions also builds the firmware after each push and publishes the
 binary through the repository workflow.
 
-The current build uses 65,706 bytes of the target's verified 128 KiB flash
+The current build uses 66,646 bytes of the target's verified 128 KiB flash
 region (about 50%).
 
 ## Test MIDI after flashing
