@@ -3,53 +3,73 @@
 [![Build QMK firmware](https://github.com/roguefort-dev/Keypad-keychron-c100-midi-pad/actions/workflows/build_binaries.yaml/badge.svg)](https://github.com/roguefort-dev/Keypad-keychron-c100-midi-pad/actions/workflows/build_binaries.yaml)
 
 USB MIDI firmware for the **Keychron C100 8K** giant macro pad, built on
-Keychron's QMK fork. The proof of concept turns the 10×10 pad into an
-isomorphic **E natural minor** MIDI controller.
+Keychron's QMK fork. The default layer is an isomorphic **E natural minor** MIDI
+controller with selectable roots and scales, octave controls, and responsive
+per-key RGB.
 
-## Performance layer
+## Scale performance layer
 
-The top row is reserved for switching performance layers. In this proof of
-concept, the far-right key momentarily opens the Settings layer; the other nine
-positions are reserved for chord, drum, macro, and additional scale layers.
+The top-left two keys shift the playable range down or up by one octave. The
+top-right key momentarily opens Settings. The other top-row positions are kept
+free for future navigation.
 
-| Reserved | Reserved | Reserved | Reserved | Reserved | Reserved | Reserved | Reserved | Reserved | Settings |
+| Oct − | Oct + |  |  |  |  |  |  |  | Hold Settings |
 |---|---|---|---|---|---|---|---|---|---|
 
-The remaining 90 keys send notes from E natural minor (`E F♯ G A B C D`). The
-lowest note is on the bottom-left. Moving right advances one scale degree;
-moving up advances three degrees, a fourth. The overlap makes interval and
-chord shapes repeat consistently across the pad.
+The remaining 90 keys send notes from the selected scale. The lowest note is at
+the bottom-left. Moving right advances one scale degree; moving up advances
+three degrees. The overlap keeps interval and chord shapes consistent and
+deliberately places duplicate notes around the grid.
 
+- Default root and scale: E natural minor (`E F♯ G A B C D`)
 - Base note: E2 (MIDI note 40)
-- Default velocity: 100
+- Fixed velocity: 100
 - Fixed channel: 1
 - Octave range: −2 to +2
-- Panic releases tracked notes and sends sustain-off, all-sound-off, and
-  all-notes-off on every channel
 
-The responsive RGB overlay keeps every root note visible in warm amber. Black
-notes are dim blue and the other scale notes are dim white. Pressing any note
-changes every duplicate of that pitch to the complementary cyan-blue, then
-restores their scale colors after the last duplicate is released.
+Every root note stays visible in warm amber. Pressing a note changes every pad
+that represents that exact MIDI note to complementary cyan-blue, including its
+duplicates. Releasing the final duplicate restores the scale colors.
 
-## Settings layer
+## Settings
 
-Hold the top-right Settings key while choosing an option:
+Hold the top-right Settings key to open this 10×10 layout:
 
-| C | C♯ | D | D♯ | E | F | F♯ | G | G♯ | A |
-|---|---|---|---|---|---|---|---|---|---|
-| A♯ | B | Major | Natural minor | Oct − | Oct + | Vel − | Vel + | Sustain toggle | Panic |
+- The two scale rows contain 18 selections per page. Their rightmost keys move
+  to the previous or next page and briefly show a 3×6 pixel arrow.
+- The lower-left 6×2 block selects the root: `C/C♯`, `D/D♯`, `E/F`, `F♯/G`,
+  `G♯/A`, and `A♯/B`.
+- A blank column separates the root selector from a 7×6 character display.
+- Root notes appear as a 3×6 TomTentacles glyph. Sharps add a cyan 2×2 marker
+  after a one-column gutter.
+- Scale names start left-aligned, hold for 400 ms, and then scroll. Selecting a
+  different scale always restarts the text from the first character.
+- Page arrows use the same 3×6 size and left alignment as the font, and remain
+  visible for 250 ms or until another control is pressed.
 
-E and Natural minor are selected at startup. Root and scale changes release
-all sounding notes first, preventing stuck notes. The selected root and scale
-are highlighted while Settings is held. The lower seven rows show the selected
-root as a persistent 5×7 pixel-art letter; sharp roots add a cyan 3×7 `#`
-beside the amber letter without obscuring the controls.
+The first page contains:
+
+| Major | Minor | Harmonic | Melodic | Dorian | Phrygian | Lydian | Mixolydian | Locrian |
+|---|---|---|---|---|---|---|---|---|
+| Major pent | Minor pent | Blues | Whole tone | Chromatic | Half-whole dim | Whole-half dim | Bebop major | Bebop dominant |
+
+The second page currently contains Hungarian minor and Japanese pentatonic,
+leaving room for sixteen more scales without another layout change.
+
+## Layer navigation
+
+While Settings is held, press the key immediately to its left to enter the
+latched layer-select page. Releasing Settings does not take you back. The first
+two keys there select Scale or Chord mode.
+
+Chord mode is intentionally an empty proof-of-concept placeholder. Its
+top-right key returns to the layer-select page; this is a direct layer change,
+not a hold or toggle.
 
 ## Build locally
 
 This repository is a QMK external userspace. It expects the Keychron fork on
-branch `2025q3`, which is the branch containing C100 8K support.
+branch `2025q3`, which contains C100 8K support.
 
 ```sh
 git clone --branch 2025q3 --recurse-submodules https://github.com/Keychron/qmk_firmware.git
@@ -60,40 +80,33 @@ make build QMK_HOME=../qmk_firmware
 
 The resulting file is `keychron_c100_8k_midi_pad.bin` in this repository's
 root. GitHub Actions also builds the firmware after each push and publishes the
-result through the repository workflow.
+binary through the repository workflow.
 
-The initial proof-of-concept build uses 58,890 bytes of the target's verified
-128 KiB flash region (about 45%).
+The current build uses 60,634 bytes of the target's verified 128 KiB flash
+region (about 46%).
 
-## Test MIDI before flashing
+## Test MIDI after flashing
 
-After flashing and reconnecting the pad, confirm that your operating system
-shows a new USB MIDI input. Open a MIDI monitor or DAW, press a note pad, and
-verify that it receives a matching note-on and note-off pair. Test the Panic
-key before a longer playing session.
+After the pad reconnects, confirm that the operating system exposes a USB MIDI
+input. Open a MIDI monitor or DAW and verify that note presses produce matching
+note-on and note-off messages. Changing the root, scale, octave, or active layer
+releases all tracked notes first to prevent stuck notes.
 
 ## Flashing and recovery
 
 Flashing firmware can make the pad temporarily unusable if the wrong image is
-selected. Keep Keychron's stock C100 8K v1.0.1 firmware available before
-flashing. Its verified SHA-256 is:
+selected. Keep Keychron's stock C100 8K v1.0.1 firmware available. Its verified
+SHA-256 is:
 
 ```text
 2f95264cc589bbe8c7e2612fb950503e75464409e64874159ca4da6da845ebc1
 ```
 
-Enter the bootloader by holding the top-left key while connecting USB, or by
-using the physical reset button under the spacebar position. Flash only a
-binary built for `keychron/c100_8k`.
-
-## Roadmap
-
-- Musical scale layouts
-- Chord pads and inversions
-- Multiple performance/macro layers
-- Persistent MIDI settings
-- Launcher/VIA-friendly configuration where practical
+Enter the bootloader by holding the top-left key while connecting USB, or use
+the physical reset button under the spacebar position. Flash only a binary
+built for `keychron/c100_8k`.
 
 ## License
 
-GPL-2.0-or-later, matching QMK Firmware. See [LICENSE](LICENSE).
+GPL-2.0-or-later, matching QMK Firmware. See [LICENSE](LICENSE) and
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

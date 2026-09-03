@@ -3,7 +3,6 @@
 
 #pragma once
 
-// The MIDI engine tracks note/channel pairs itself so notes cannot become
-// stuck when a setting changes while a pad is held.
+// Fixed proof-of-concept MIDI defaults.
 #define MIDI_PAD_BASE_C_NOTE 36
 #define MIDI_PAD_DEFAULT_VELOCITY 100
