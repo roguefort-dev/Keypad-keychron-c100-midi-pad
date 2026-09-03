@@ -1996,7 +1996,7 @@ static void render_chord_degrees(void) {
     const uint8_t col = degree % 7;
     if (selected_chord_shape < 0 &&
         (custom_degree_mask & (1U << degree))) {
-      set_key_color(row, col, COLOR_QUINARY, DEFAULT_PAD_BRIGHTNESS);
+      set_key_color(row, col, COLOR_QUINARY, ROOT_NOTE_BRIGHTNESS);
     } else {
       set_key_color(row, col, COLOR_QUATERNARY, CHORD_IDLE_BRIGHTNESS);
     }
@@ -2007,10 +2007,9 @@ static void render_chord_shapes(void) {
   for (uint8_t shape = 0; shape < CHORD_PRESET_COUNT; ++shape) {
     const uint8_t row = 5 + (shape / 7);
     const uint8_t col = shape % 7;
-    set_key_color(row, col,
-                  selected_chord_shape == shape ? COLOR_QUINARY
-                                                : COLOR_PRIMARY,
-                  CHORD_IDLE_BRIGHTNESS);
+    set_key_color(row, col, COLOR_QUINARY,
+                  selected_chord_shape == shape ? ROOT_NOTE_BRIGHTNESS
+                                                : CHORD_IDLE_BRIGHTNESS);
   }
 }
 

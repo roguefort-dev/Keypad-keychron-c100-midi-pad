@@ -91,7 +91,8 @@ The stepped voicing controls use a separate rainbow palette. Enabled `AUTO`,
 `LATCH`, and `QNT` use the theme's Secondary color at the normal brightness of
 180, so they remain distinct from a 255-brightness physical press. All resting,
 selected, root, pressed, and chord-tone LEDs use the currently selected
-five-color theme.
+five-color theme. Idle presets use Quinary at brightness 180; selected presets
+and degrees retain Quinary but rise to brightness 225.
 
 ## Settings
 
