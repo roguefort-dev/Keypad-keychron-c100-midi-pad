@@ -2,14 +2,57 @@
 
 [![Build QMK firmware](https://github.com/roguefort-dev/Keypad-keychron-c100-midi-pad/actions/workflows/build_binaries.yaml/badge.svg)](https://github.com/roguefort-dev/Keypad-keychron-c100-midi-pad/actions/workflows/build_binaries.yaml)
 
-USB MIDI firmware for the **Keychron C100 8K** giant macro pad, built on
-Keychron's QMK fork. The default layer is an isomorphic **E natural minor** MIDI
-controller with selectable roots and scales, octave controls, and responsive
-per-key RGB.
+USB MIDI firmware that turns the **Keychron C100 8K** giant macro pad into a
+playable scale and chord instrument with responsive per-key RGB.
 
 ![Keychron C100 8K running the MIDI pad firmware](docs/images/keychron-c100-midi-pad.jpeg)
 
-## Scale performance layer
+## What it does
+
+### Play scales
+
+Scale mode turns the keyboard into a large isomorphic note grid. Choose a root
+and scale, shift the playable range by octaves, and use repeating note shapes
+across the board. RGB distinguishes root notes from the rest of the scale and
+lights every duplicate of a note together when it is played.
+
+### Play chords
+
+Chord mode lets the left hand choose or shape a chord while the right hand
+plays roots across three octaves. It includes 35 presets, freely toggleable
+degrees, inversions, bass octaves, drop and open voicings, strumming, voice
+leading, latching, and optional scale quantization.
+
+Preset chords may be extended before or while a root is played. Custom chords
+can be built from any combination of degrees, including rootless voicings.
+Chromatic notes remain available even when they fall outside the selected
+scale, with alternate-color feedback to make that visible.
+
+### Choose the key, scale, and colors
+
+Settings provides root and scale selection, paged access to additional scales,
+and five color palettes. The selected key, scale, and palette are remembered
+after the keyboard is unplugged.
+
+Available palettes:
+
+| Palette | Primary | Secondary | Tertiary | Quaternary | Quinary |
+|---|---|---|---|---|---|
+| Neon | `#002AFF` | `#00FBFF` | `#AE00FF` | `#FF00EA` | `#FF0033` |
+| Cyberpunk | `#FF00AE` | `#FF7300` | `#B3FF00` | `#FFD500` | `#FF006F` |
+| Terminal | `#00B3FF` | `#FFA200` | `#FF0000` | `#1FFF62` | `#FBFF00` |
+| Navy | `#009DFF` | `#FF7300` | `#FFFF00` | `#BE00FF` | `#00FF5A` |
+| Matrix | `#00FFCC` | `#B3FF00` | `#FF00C8` | `#FF0000` | `#FF9500` |
+
+### Move between modes and layers
+
+Scale and Chord mode share the same navigation row, so their essential controls
+never move. Settings also provides access to a latched layer-select page for
+future modes and layouts.
+
+## How it works
+
+### Shared top row
 
 The top-left two keys shift the playable range down or up by one octave. The
 fourth and fifth keys switch directly to Scale or Chord mode, and the top-right
@@ -19,29 +62,27 @@ modes.
 | Oct − | Oct + |  | Scale | Chord |  |  |  |  | Hold Settings |
 |---|---|---|---|---|---|---|---|---|---|
 
+While Settings is held, pressing the key immediately to its left opens the
+latched layer-select page. Releasing Settings does not return to the previous
+mode. The first two keys on that page select Scale or Chord mode.
+
+### Scale grid
+
 The remaining 90 keys send notes from the selected scale. The lowest note is at
 the bottom-left. Moving right advances one scale degree; moving up advances
-three degrees. The overlap keeps interval and chord shapes consistent and
-deliberately places duplicate notes around the grid.
+three degrees. This overlap creates repeating shapes and duplicate notes across
+the grid.
 
-- Default root and scale: E natural minor (`E F♯ G A B C D`)
-- Base note: E2 (MIDI note 40)
-- Fixed velocity: 100
-- Fixed channel: 1
-- Octave range: −2 to +2
+At rest, ordinary notes and root notes use two distinct palette colors. Pressing
+a note changes every pad representing that exact MIDI note—including its
+duplicates—to the palette's pressed color. Releasing the final duplicate
+restores the resting colors.
 
-At rest, the playable grid uses only two palette colors: ordinary pads at
-brightness 180 and root notes at brightness 225. Pressing a note changes
-every pad that represents that exact MIDI note—including its duplicates—to the
-palette's pressed color at brightness 255. Releasing the final duplicate restores
-the two-color resting state.
+### Chord grid
 
-## Chord performance layer
-
-Chord mode keeps the same top row as Scale mode. Its rightmost 7×3 block plays
-the first seven notes of the selected scale across three octaves. The lowest
-and most accessible row begins with the simplest major chord; complexity grows
-to the right within each family and upward across the board:
+The rightmost 7×3 block plays the first seven notes of the selected scale across
+three octaves. Presets are arranged from simple to complex from left to right,
+with the most accessible families nearest the bottom edge:
 
 | Family | Left-to-right presets |
 |---|---|
@@ -51,16 +92,13 @@ to the right within each family and upward across the board:
 | Minor | Min, Min6, Min7, Min9, Min11, Min13, MinΔ7 |
 | Major | Maj, Maj6, Maj7, Maj9, Maj11, Maj13, Maj13♯11 |
 
-The two rows above the presets toggle scale-relative chord degrees 1–14. The
-default custom chord is `1·3·5`. Choosing a degree while an idle preset is
-selected starts a fresh custom chord containing only degree 1 and the chosen
-degree; degree 1 can then be removed for rootless voicings. While either the
-preset key itself or one of its playable root notes is held, degree buttons
-instead preserve the preset's fixed tones and queue scale-relative extensions
-in press order above its current highest tone (for example, Maj7 + degree 2
-becomes Maj7(add9)). This also works before a root note is played. Active custom
-chords use the same above-highest behavior, and the MIDI chord is re-voiced
-immediately.
+The two rows above the presets toggle scale-relative chord degrees 1–14.
+Choosing a degree while an idle preset is selected starts a fresh custom chord
+containing degree 1 and the chosen degree; degree 1 can then be removed. While
+either the preset key itself or one of its playable root notes is held, degree
+buttons preserve the preset and queue extensions in press order above its
+highest tone. For example, Maj7 + degree 2 becomes Maj7(add9). Active custom
+chords are re-voiced immediately when their degrees change.
 
 Fixed presets keep their literal chromatic intervals even when a chord contains
 notes outside the selected scale. For example, the Maj preset on E always sends
@@ -91,16 +129,11 @@ and `QNT`; the row below contains `INV`, `BASS`, `DROP`, `OPEN`, and `STR`:
   Quantized tones use the ordinary in-scale chord-tone color.
 
 Control changes temporarily replace the 7×3 root grid with a bottom-aligned
-3×5 glyph (`I`, `B`, `D`, `A`, `O`, `S`, `L`, or `Q`). Multi-level controls use the six
-pixels above the glyph as a counter; color laps extend the counter beyond six.
-The stepped voicing controls use a separate rainbow palette. Enabled `AUTO`,
-`LATCH`, and `QNT` use the theme's Secondary color at the normal brightness of
-180, so they remain distinct from a 255-brightness physical press. All resting,
-selected, root, pressed, and chord-tone LEDs use the currently selected
-five-color theme. Idle presets use Tertiary at brightness 180; selected
-presets and degrees use Quinary at brightness 225.
+3×5 glyph (`I`, `B`, `D`, `A`, `O`, `S`, `L`, or `Q`). Multi-level controls use
+the six pixels above the glyph as a counter; color laps extend the counter
+beyond six. Stepped voicing controls use a separate rainbow palette.
 
-## Settings
+### Settings layout
 
 Hold the top-right Settings key to open this 10×10 layout:
 
@@ -128,35 +161,32 @@ The first page contains:
 The second page currently contains Hungarian minor and Japanese pentatonic,
 leaving room for sixteen more scales without another layout change.
 
-## Color palettes
+### Color and state behavior
 
-Each palette is five ordered source colors rather than five rigid UI roles.
-Individual views compose them consistently: Scale mode uses Primary for idle
-notes, Tertiary for roots and the character display, and Secondary for pressed
-notes. Quaternary and Quinary provide complementary controls and navigation.
-Brightness is applied separately: roots, pressed notes, and Settings accents
-use the full 255 level, while ordinary pads are dimmed to preserve hierarchy.
+Each theme supplies five colors which the active view combines according to its
+layout and state. Selection, roots, playable notes, controls, displays, and
+physical presses remain visually distinct within each theme. The selected
+palette, root key, and scale are stored in EEPROM whenever they change and
+restored after unplugging or rebooting.
 
-| Palette | Primary | Secondary | Tertiary | Quaternary | Quinary |
-|---|---|---|---|---|---|
-| Neon | `#002AFF` | `#00FBFF` | `#AE00FF` | `#FF00EA` | `#FF0033` |
-| Cyberpunk | `#FF00AE` | `#FF7300` | `#B3FF00` | `#FFD500` | `#FF006F` |
-| Terminal | `#00B3FF` | `#FFA200` | `#FF0000` | `#1FFF62` | `#FBFF00` |
-| Navy | `#009DFF` | `#FF7300` | `#FFFF00` | `#BE00FF` | `#00FF5A` |
-| Matrix | `#00FFCC` | `#B3FF00` | `#FF00C8` | `#FF0000` | `#FF9500` |
+## Default values and ranges
 
-The last selected palette, root key, and scale are saved to EEPROM whenever
-they change and restored after unplugging or rebooting. A fresh or reset board
-starts with Terminal, E, and natural minor.
+| Setting | Default or range |
+|---|---|
+| Root and scale | E natural minor (`E F♯ G A B C D`) |
+| Base note | E2 (MIDI note 40) |
+| Custom chord | Degrees `1·3·5` |
+| Color palette | Terminal |
+| MIDI velocity | 100 |
+| MIDI channel | 1 |
+| Octave shift | −2 to +2 |
+| Ordinary-pad brightness | 180 |
+| Root-note brightness | 225 |
+| Physical-press brightness | 255 |
+| Enabled toggle brightness | 180 |
 
-## Layer navigation
-
-While Settings is held, press the key immediately to its left to enter the
-latched layer-select page. Releasing Settings does not take you back. The first
-two keys there also select Scale or Chord mode.
-
-Both performance modes use the same direct Scale/Chord switches and momentary
-Settings key.
+A fresh or reset board uses these defaults. Settings accents use brightness
+255; idle chord presets use 180, and selected presets and degrees use 225.
 
 ## Build locally
 
