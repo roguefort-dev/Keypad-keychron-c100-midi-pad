@@ -27,14 +27,19 @@ deliberately places duplicate notes around the grid.
 - Fixed channel: 1
 - Octave range: −2 to +2
 
-Every root note stays visible in warm amber. Pressing a note changes every pad
-that represents that exact MIDI note to complementary cyan-blue, including its
-duplicates. Releasing the final duplicate restores the scale colors.
+At rest, the playable grid uses only two palette colors: one for every ordinary
+note and one full-intensity color for every root note. Pressing a note changes
+every pad that represents that exact MIDI note—including its duplicates—to the
+palette's full-intensity pressed color. Releasing the final duplicate restores
+the two-color resting state.
 
 ## Settings
 
 Hold the top-right Settings key to open this 10×10 layout:
 
+- The top-left two keys select the previous or next color palette. The new
+  palette applies immediately, and its name scrolls through one complete pass
+  before the previous root/scale display returns.
 - The two scale rows contain 18 selections per page. Their rightmost keys move
   to the previous or next page and briefly show a 3×6 pixel arrow.
 - The lower-left 6×2 block selects the root: `C/C♯`, `D/D♯`, `E/F`, `F♯/G`,
@@ -55,6 +60,21 @@ The first page contains:
 
 The second page currently contains Hungarian minor and Japanese pentatonic,
 leaving room for sixteen more scales without another layout change.
+
+## Color palettes
+
+Each palette contains five saturated source colors for ordinary pads, roots,
+pressed notes, navigation, and the character display. Brightness is applied
+separately: roots and pressed notes use the full 255 level, while ordinary pads
+are dimmed just enough to keep those accents clear. Settings uses much higher
+levels throughout.
+
+| Palette | Pad | Root | Pressed | Navigation | Display |
+|---|---|---|---|---|---|
+| Neon | `#39FF14` | `#FF4800` | `#00AAFF` | `#FF00CC` | `#00E5FF` |
+| Cyberpunk | `#FFE600` | `#FF0066` | `#00FFFF` | `#9900FF` | `#FF00DD` |
+| Terminal | `#00FF48` | `#FFB000` | `#00FFCC` | `#FF2020` | `#A6FF00` |
+| Rainbow | `#00FF5A` | `#FF3200` | `#006EFF` | `#BE00FF` | `#FFDC00` |
 
 ## Layer navigation
 
@@ -82,7 +102,7 @@ The resulting file is `keychron_c100_8k_midi_pad.bin` in this repository's
 root. GitHub Actions also builds the firmware after each push and publishes the
 binary through the repository workflow.
 
-The current build uses 60,634 bytes of the target's verified 128 KiB flash
+The current build uses 61,030 bytes of the target's verified 128 KiB flash
 region (about 46%).
 
 ## Test MIDI after flashing
