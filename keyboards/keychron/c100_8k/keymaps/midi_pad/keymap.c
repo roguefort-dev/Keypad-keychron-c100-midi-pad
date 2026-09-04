@@ -7,10 +7,14 @@
 #include "qmk_midi.h"
 
 #include "chord_degree_logic.h"
+#include "arp_logic.h"
 
 enum layers {
   SCALE_LAYER,
   CHORD_LAYER,
+  ARP_SETTINGS_LAYER,
+  ANIMATION_PROTOTYPE_LAYER,
+  EMPTY_PLACEHOLDER_LAYER,
   LAYER_SELECT_LAYER,
   SETTINGS_LAYER,
 };
@@ -135,6 +139,19 @@ enum custom_keycodes {
   CH_SHAPE_33,
   CH_SHAPE_34,
   CH_ROOT,
+  MD_ARP,
+  ARP_PATTERN_PREV,
+  ARP_PATTERN_NEXT,
+  ARP_DIVISION_PREV,
+  ARP_DIVISION_NEXT,
+  ARP_LENGTH,
+  ARP_OCTAVES,
+  ARP_RETRIGGER,
+  ARP_LATCH,
+  ARP_HOST_CLOCK,
+  ARP_DOT_TRIPLET,
+  ARP_ENABLE,
+  ANIMATION_TRIGGER,
 };
 
 #define MD_N MD_NOTE
@@ -142,13 +159,16 @@ enum custom_keycodes {
 #define MD_LAYERS TO(LAYER_SELECT_LAYER)
 #define MD_SCALE TO(SCALE_LAYER)
 #define MD_CHORD TO(CHORD_LAYER)
+#define MD_MIDI TO(SCALE_LAYER)
+#define MD_ANIM TO(ANIMATION_PROTOTYPE_LAYER)
+#define MD_EMPTY TO(EMPTY_PLACEHOLDER_LAYER)
 #define XXXXXXX KC_NO
 #define _______ KC_TRNS
 
 // clang-format off
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     [SCALE_LAYER] = LAYOUT_tkl_ansi(
-        MD_OCTAVE_DOWN, MD_OCTAVE_UP, XXXXXXX, MD_SCALE, MD_CHORD, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, MD_SETTINGS,
+        MD_OCTAVE_DOWN, MD_OCTAVE_UP, XXXXXXX, MD_SCALE, MD_CHORD, MD_ARP, XXXXXXX, XXXXXXX, XXXXXXX, MD_SETTINGS,
         MD_N, MD_N, MD_N, MD_N, MD_N, MD_N, MD_N, MD_N, MD_N, MD_N,
         MD_N, MD_N, MD_N, MD_N, MD_N, MD_N, MD_N, MD_N, MD_N, MD_N,
         MD_N, MD_N, MD_N, MD_N, MD_N, MD_N, MD_N, MD_N, MD_N, MD_N,
@@ -160,7 +180,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         MD_N, MD_N, MD_N, MD_N, MD_N, MD_N, MD_N, MD_N, MD_N, MD_N),
 
     [CHORD_LAYER] = LAYOUT_tkl_ansi(
-        MD_OCTAVE_DOWN, MD_OCTAVE_UP, XXXXXXX, MD_SCALE, MD_CHORD, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, MD_SETTINGS,
+        MD_OCTAVE_DOWN, MD_OCTAVE_UP, XXXXXXX, MD_SCALE, MD_CHORD, MD_ARP, XXXXXXX, XXXXXXX, XXXXXXX, MD_SETTINGS,
         CH_AUTO, CH_LATCH, CH_QUANTIZE, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
         CH_INV, CH_BASS, CH_DROP, CH_OPEN, CH_STRUM, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
         CH_DEGREE_1, CH_DEGREE_2, CH_DEGREE_3, CH_DEGREE_4, CH_DEGREE_5, CH_DEGREE_6, CH_DEGREE_7, CH_ROOT, CH_ROOT, CH_ROOT,
@@ -171,8 +191,44 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         CH_SHAPE_21, CH_SHAPE_22, CH_SHAPE_23, CH_SHAPE_24, CH_SHAPE_25, CH_SHAPE_26, CH_SHAPE_27, CH_ROOT, CH_ROOT, CH_ROOT,
         CH_SHAPE_28, CH_SHAPE_29, CH_SHAPE_30, CH_SHAPE_31, CH_SHAPE_32, CH_SHAPE_33, CH_SHAPE_34, CH_ROOT, CH_ROOT, CH_ROOT),
 
+    [ARP_SETTINGS_LAYER] = LAYOUT_tkl_ansi(
+        MD_OCTAVE_DOWN, MD_OCTAVE_UP, XXXXXXX, MD_SCALE, MD_CHORD, MD_ARP, XXXXXXX, XXXXXXX, XXXXXXX, MD_SETTINGS,
+        XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
+        ARP_ENABLE, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
+        ARP_PATTERN_PREV, ARP_PATTERN_NEXT, ARP_DIVISION_PREV, ARP_DIVISION_NEXT, ARP_LENGTH, ARP_OCTAVES, ARP_RETRIGGER, ARP_LATCH, ARP_HOST_CLOCK, ARP_DOT_TRIPLET,
+        XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
+        XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
+        XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
+        XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
+        XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
+        XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX),
+
+    [ANIMATION_PROTOTYPE_LAYER] = LAYOUT_tkl_ansi(
+        ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, MD_LAYERS,
+        ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER,
+        ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER,
+        ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER,
+        ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER,
+        ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER,
+        ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER,
+        ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER,
+        ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER,
+        ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER, ANIMATION_TRIGGER),
+
+    [EMPTY_PLACEHOLDER_LAYER] = LAYOUT_tkl_ansi(
+        XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, MD_LAYERS,
+        XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
+        XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
+        XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
+        XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
+        XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
+        XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
+        XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
+        XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
+        XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX),
+
     [LAYER_SELECT_LAYER] = LAYOUT_tkl_ansi(
-        MD_SCALE, MD_CHORD, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
+        MD_ANIM, MD_EMPTY, MD_MIDI, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
         XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
         XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
         XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
@@ -202,6 +258,9 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 #undef MD_LAYERS
 #undef MD_SCALE
 #undef MD_CHORD
+#undef MD_MIDI
+#undef MD_ANIM
+#undef MD_EMPTY
 #undef XXXXXXX
 #undef _______
 
@@ -219,7 +278,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 #define GLYPH_WIDTH 3
 #define GLYPH_ADVANCE 4
 #define TEXT_SCROLL_HOLD_MS 400
-#define TEXT_SCROLL_STEP_MS 260
+#define TEXT_SCROLL_STEP_MS 86
 #define PAGE_ARROW_MS 250
 #define DEFAULT_PAD_BRIGHTNESS 180
 #define ROOT_NOTE_BRIGHTNESS 225
@@ -244,6 +303,21 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 #define CHORD_RESET_FLASH_STEP_MS 50
 #define CHORD_CONTROL_BRIGHTNESS DEFAULT_PAD_BRIGHTNESS
 #define CHORD_IDLE_BRIGHTNESS DEFAULT_PAD_BRIGHTNESS
+#define ARP_HOLD_MS 650
+#define ARP_INTERNAL_BPM 120
+#define ARP_DIVISION_COUNT 7
+#define ARP_MAX_SOURCE_NOTES 64
+#define ARP_DISPLAY_FIRST_ROW 4
+#define ARP_DISPLAY_ROWS 6
+#define ARP_DISPLAY_COLS 10
+#define ARP_PREVIEW_FIRST_ROW 6
+#define ARP_PREVIEW_ROWS 4
+#define ARP_PREVIEW_MIN_FADE_MS 100
+#define ARP_STATIC_ANNOUNCEMENT_MS 900
+#define ARP_HOST_CLOCK_TIMEOUT_MS 750
+#define ANIMATION_PROTOTYPE_COUNT 8
+#define ANIMATION_PROTOTYPE_DURATION_MS 800
+#define LAYER_TRANSITION_DURATION_MS 420
 
 enum chord_control {
   CHORD_CONTROL_INVERSION,
@@ -476,6 +550,16 @@ static const char PROGMEM palette_names[PALETTE_COUNT][12] = {
     [PALETTE_MATRIX] = "MATRIX",
 };
 
+static const char PROGMEM arp_modifier_names[ARP_MODIFIER_COUNT][8] = {
+    [ARP_MODIFIER_OFF] = "OFF",
+    [ARP_MODIFIER_DOTTED] = "DOTTED",
+    [ARP_MODIFIER_TRIPLET] = "TRIPLET",
+};
+
+static const char PROGMEM arp_division_names[ARP_DIVISION_COUNT][3] = {
+    "1", "2", "4", "8", "16", "32", "64",
+};
+
 // TomTentacles is a fixed-width 3x6 CC0 font. Bits 7..5 are left to right.
 // See THIRD_PARTY_NOTICES.md.
 static const uint8_t PROGMEM font_3x6[26][DISPLAY_HEIGHT] = {
@@ -574,6 +658,61 @@ static uint16_t chord_display_duration = CHORD_DISPLAY_MS;
 static int8_t chord_reset_flash_control = -1;
 static uint32_t chord_reset_flash_timer = 0;
 
+static bool arp_enabled = false;
+static enum arp_pattern arp_selected_pattern = ARP_PATTERN_UP;
+static uint8_t arp_division = 4; // 1/16
+static uint8_t arp_length_index = 2; // 75%
+static uint8_t arp_extra_octaves = 0;
+static enum arp_modifier arp_modifier = ARP_MODIFIER_OFF;
+static bool arp_retrigger = true;
+static bool arp_host_clock = true;
+static bool arp_host_transport_running = true;
+static bool arp_host_clock_seen = false;
+static bool arp_key_pressed = false;
+static bool arp_key_hold_handled = false;
+static uint32_t arp_key_press_timer = 0;
+static uint8_t arp_source_counts[MIDI_MAX_NOTE + 1];
+static uint8_t arp_played_order[ARP_MAX_SOURCE_NOTES];
+static uint8_t arp_played_count = 0;
+static uint8_t arp_scale_physical_count = 0;
+static uint8_t arp_step_index = 0;
+static uint16_t arp_clock_units = 0;
+static uint32_t arp_internal_step_timer = 0;
+static uint32_t arp_output_off_timer = 0;
+static bool arp_output_active = false;
+static uint8_t arp_output_notes[ARP_MAX_SOURCE_NOTES];
+static uint8_t arp_output_count = 0;
+static uint32_t arp_last_clock_timer = 0;
+static uint16_t arp_clock_period_ms = 21;
+static bool arp_clock_period_initialized = false;
+
+static char arp_display_text[16] = "UP";
+static uint8_t arp_display_length = 2;
+static uint16_t arp_display_offset = ARP_DISPLAY_COLS;
+static uint32_t arp_display_timer = 0;
+static bool arp_display_holding = true;
+static bool arp_display_pattern_preview = false;
+static bool arp_display_reveal_pattern = true;
+static uint8_t arp_preview_step = 0;
+static uint32_t arp_preview_step_timer = 0;
+static uint32_t arp_preview_hit_timer[ARP_DISPLAY_COLS];
+static bool animation_prototype_active = false;
+static uint8_t animation_prototype = 0;
+static uint8_t animation_origin_row = 0;
+static uint8_t animation_origin_col = 0;
+static uint32_t animation_prototype_timer = 0;
+static bool layer_transition_active = false;
+static uint32_t layer_transition_timer = 0;
+static palette_color_t layer_transition_from[RGB_MATRIX_LED_COUNT];
+static bool dfu_sysex_matches = false;
+static bool dfu_reboot_requested = false;
+
+static void arp_clear_source(void);
+static void arp_stop_output(void);
+static void arp_source_add(uint8_t note);
+static void arp_source_remove(uint8_t note);
+static void arp_restart(bool force_first_step);
+
 static void set_default_persistent_config(void) {
   persistent_config.raw = 0;
   persistent_config.values.version = MIDI_PAD_CONFIG_VERSION;
@@ -606,6 +745,16 @@ static uint8_t led_index(uint8_t row, uint8_t col) {
   return (row * MATRIX_COLS) + col;
 }
 
+static void set_led_rgb(uint8_t led, uint8_t red, uint8_t green,
+                        uint8_t blue) {
+  rgb_matrix_set_color(led, red, green, blue);
+  if (!layer_transition_active && led < RGB_MATRIX_LED_COUNT) {
+    layer_transition_from[led].red = red;
+    layer_transition_from[led].green = green;
+    layer_transition_from[led].blue = blue;
+  }
+}
+
 static uint8_t scale_component(uint8_t component, uint8_t brightness) {
   return ((uint16_t)component * brightness) / 255;
 }
@@ -616,14 +765,24 @@ static void set_palette_color(uint8_t led, enum palette_color color_index,
   const uint8_t red = pgm_read_byte(&color->red);
   const uint8_t green = pgm_read_byte(&color->green);
   const uint8_t blue = pgm_read_byte(&color->blue);
-  rgb_matrix_set_color(led, scale_component(red, brightness),
-                       scale_component(green, brightness),
-                       scale_component(blue, brightness));
+  set_led_rgb(led, scale_component(red, brightness),
+              scale_component(green, brightness),
+              scale_component(blue, brightness));
 }
 
 static void set_key_color(uint8_t row, uint8_t col,
                           enum palette_color color_index, uint8_t brightness) {
   set_palette_color(led_index(row, col), color_index, brightness);
+}
+
+static void set_fixed_status_color(uint8_t row, uint8_t col, bool enabled,
+                                   uint8_t brightness) {
+  const uint8_t red = enabled ? 0x20 : 0xFF;
+  const uint8_t green = enabled ? 0xFF : 0x18;
+  const uint8_t blue = enabled ? 0x55 : 0x18;
+  set_led_rgb(led_index(row, col), scale_component(red, brightness),
+              scale_component(green, brightness),
+              scale_component(blue, brightness));
 }
 
 static void set_chord_state_color(uint8_t row, uint8_t col, uint8_t level,
@@ -636,9 +795,9 @@ static void set_chord_state_color(uint8_t row, uint8_t col, uint8_t level,
   const uint8_t red = pgm_read_byte(&color->red);
   const uint8_t green = pgm_read_byte(&color->green);
   const uint8_t blue = pgm_read_byte(&color->blue);
-  rgb_matrix_set_color(led_index(row, col), scale_component(red, brightness),
-                       scale_component(green, brightness),
-                       scale_component(blue, brightness));
+  set_led_rgb(led_index(row, col), scale_component(red, brightness),
+              scale_component(green, brightness),
+              scale_component(blue, brightness));
 }
 
 static bool is_black_key(uint8_t pitch_class) {
@@ -690,6 +849,259 @@ static void tracked_note_off(uint8_t note) {
   }
 }
 
+static bool arp_source_is_empty(void) {
+  for (uint16_t note = 0; note <= MIDI_MAX_NOTE; ++note) {
+    if (arp_source_counts[note] > 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static void arp_stop_output(void) {
+  for (uint8_t index = 0; index < arp_output_count; ++index) {
+    tracked_note_off(arp_output_notes[index]);
+  }
+  arp_output_count = 0;
+  arp_output_active = false;
+}
+
+static void arp_clear_source(void) {
+  arp_stop_output();
+  for (uint16_t note = 0; note <= MIDI_MAX_NOTE; ++note) {
+    arp_source_counts[note] = 0;
+  }
+  arp_played_count = 0;
+  arp_step_index = 0;
+  arp_clock_units = 0;
+}
+
+static void arp_source_add(uint8_t note) {
+  if (arp_source_counts[note]++ > 0) {
+    return;
+  }
+  if (arp_played_count < ARP_MAX_SOURCE_NOTES) {
+    arp_played_order[arp_played_count++] = note;
+  }
+}
+
+static void arp_source_remove(uint8_t note) {
+  if (arp_source_counts[note] == 0 || --arp_source_counts[note] > 0) {
+    return;
+  }
+  for (uint8_t index = 0; index < arp_played_count; ++index) {
+    if (arp_played_order[index] != note) {
+      continue;
+    }
+    for (uint8_t following = index + 1; following < arp_played_count;
+         ++following) {
+      arp_played_order[following - 1] = arp_played_order[following];
+    }
+    --arp_played_count;
+    break;
+  }
+  if (arp_source_is_empty()) {
+    arp_stop_output();
+  }
+}
+
+static void arp_append_unique(uint8_t *notes, uint8_t *count, uint8_t note) {
+  for (uint8_t index = 0; index < *count; ++index) {
+    if (notes[index] == note) {
+      return;
+    }
+  }
+  if (*count < ARP_MAX_SOURCE_NOTES) {
+    notes[(*count)++] = note;
+  }
+}
+
+static uint8_t arp_build_note_list(uint8_t *notes) {
+  uint8_t count = 0;
+  if (arp_selected_pattern == ARP_PATTERN_PLAYED) {
+    for (uint8_t octave = 0; octave <= arp_extra_octaves; ++octave) {
+      for (uint8_t index = 0; index < arp_played_count; ++index) {
+        const uint16_t note = arp_played_order[index] + (octave * 12);
+        if (note <= MIDI_MAX_NOTE) {
+          arp_append_unique(notes, &count, note);
+        }
+      }
+    }
+    return count;
+  }
+
+  for (uint8_t octave = 0; octave <= arp_extra_octaves; ++octave) {
+    for (uint16_t source = 0; source <= MIDI_MAX_NOTE; ++source) {
+      if (arp_source_counts[source] == 0) {
+        continue;
+      }
+      const uint16_t note = source + (octave * 12);
+      if (note <= MIDI_MAX_NOTE) {
+        arp_append_unique(notes, &count, note);
+      }
+    }
+  }
+  for (uint8_t index = 1; index < count; ++index) {
+    const uint8_t note = notes[index];
+    uint8_t position = index;
+    while (position > 0 && notes[position - 1] > note) {
+      notes[position] = notes[position - 1];
+      --position;
+    }
+    notes[position] = note;
+  }
+  return count;
+}
+
+static uint16_t arp_length_per_mille(void) {
+  static const uint16_t lengths[] = {250, 500, 750, 1001};
+  return lengths[arp_length_index % 4];
+}
+
+static bool arp_host_clock_active_now(void) {
+  return arp_host_clock_is_active(
+      arp_host_clock, arp_host_clock_seen,
+      timer_elapsed32(arp_last_clock_timer), ARP_HOST_CLOCK_TIMEOUT_MS);
+}
+
+static uint32_t arp_current_step_ms(void) {
+  return arp_preview_step_milliseconds(
+      arp_division, arp_modifier,
+      arp_host_clock && arp_clock_period_initialized,
+      arp_clock_period_ms, ARP_INTERNAL_BPM);
+}
+
+static void arp_play_step(void) {
+  uint8_t notes[ARP_MAX_SOURCE_NOTES];
+  const uint8_t count = arp_build_note_list(notes);
+  if (!arp_enabled || count == 0) {
+    arp_stop_output();
+    return;
+  }
+
+  uint8_t next_output_notes[ARP_MAX_SOURCE_NOTES];
+  uint8_t next_output_count = 0;
+  if (arp_selected_pattern == ARP_PATTERN_CHORD) {
+    for (uint8_t index = 0; index < count; ++index) {
+      next_output_notes[next_output_count++] = notes[index];
+    }
+  } else {
+    const uint8_t sequence_index = arp_pattern_note_index(
+        arp_selected_pattern, arp_step_index, count);
+    next_output_notes[next_output_count++] = notes[sequence_index];
+  }
+
+  const bool legato_transition =
+      arp_output_active && arp_gate_is_legato(arp_length_per_mille());
+  if (!legato_transition) {
+    arp_stop_output();
+  }
+  for (uint8_t index = 0; index < next_output_count; ++index) {
+    tracked_note_on(next_output_notes[index]);
+  }
+  if (legato_transition) {
+    // MIDI ordering is deliberate: the next Note On precedes the previous
+    // Note Off, giving mono synths a real overlap for legato detection.
+    for (uint8_t index = 0; index < arp_output_count; ++index) {
+      tracked_note_off(arp_output_notes[index]);
+    }
+  }
+  arp_output_count = next_output_count;
+  for (uint8_t index = 0; index < next_output_count; ++index) {
+    arp_output_notes[index] = next_output_notes[index];
+  }
+  arp_output_active = true;
+  arp_output_off_timer = timer_read32();
+  ++arp_step_index;
+}
+
+static void arp_restart(bool force_first_step) {
+  if (!force_first_step && !arp_retrigger) {
+    return;
+  }
+  arp_stop_output();
+  arp_step_index = 0;
+  arp_clock_units = 0;
+  arp_internal_step_timer = 0;
+}
+
+static void arp_realtime_callback(MidiDevice *device, uint8_t message) {
+  (void)device;
+  if (message == MIDI_START) {
+    arp_host_transport_running = true;
+    arp_restart(true);
+    return;
+  }
+  if (message == MIDI_CONTINUE) {
+    arp_host_transport_running = true;
+    return;
+  }
+  if (message == MIDI_STOP) {
+    arp_host_transport_running = false;
+    arp_host_clock_seen = false;
+    arp_clock_units = 0;
+    arp_stop_output();
+    return;
+  }
+  if (message != MIDI_CLOCK) {
+    return;
+  }
+
+  const uint32_t now = timer_read32();
+  if (arp_host_clock_seen) {
+    const uint32_t elapsed = timer_elapsed32(arp_last_clock_timer);
+    if (elapsed > 0 && elapsed < 250) {
+      if (arp_clock_period_initialized) {
+        arp_clock_period_ms = ((arp_clock_period_ms * 7) + elapsed) / 8;
+      } else {
+        arp_clock_period_ms = elapsed;
+        arp_clock_period_initialized = true;
+      }
+    } else if (elapsed > ARP_HOST_CLOCK_TIMEOUT_MS) {
+      arp_clock_period_initialized = false;
+    }
+  }
+  arp_host_clock_seen = true;
+  arp_last_clock_timer = now;
+  if (!arp_enabled ||
+      arp_clock_driver_for_state(arp_host_clock, true,
+                                 arp_host_transport_running) !=
+          ARP_CLOCK_DRIVER_HOST ||
+      arp_source_is_empty()) {
+    return;
+  }
+  arp_clock_units += 24;
+  const uint16_t target = arp_step_clock_units(arp_division, arp_modifier);
+  if (arp_clock_units >= target) {
+    arp_clock_units -= target;
+    arp_play_step();
+  }
+}
+
+static void midi_pad_sysex_callback(MidiDevice *device, uint16_t start_byte,
+                                    uint8_t data_length, uint8_t *data) {
+  static const uint8_t command[] = {
+      SYSEX_BEGIN, 0x7D, 'C', '1', '0', '0', 'D', 'F', 'U', SYSEX_END,
+  };
+  (void)device;
+
+  if (start_byte == 0) {
+    dfu_sysex_matches = true;
+  }
+  for (uint8_t index = 0; index < data_length; ++index) {
+    const uint16_t position = start_byte + index;
+    if (position >= sizeof(command) || data[index] != command[position]) {
+      dfu_sysex_matches = false;
+    }
+    if (data[index] == SYSEX_END) {
+      if (dfu_sysex_matches && position + 1 == sizeof(command)) {
+        dfu_reboot_requested = true;
+      }
+      dfu_sysex_matches = false;
+    }
+  }
+}
+
 static void press_note(uint8_t row, uint8_t col) {
   if (active_notes[row][col] != NO_ACTIVE_NOTE) {
     return;
@@ -697,7 +1109,16 @@ static void press_note(uint8_t row, uint8_t col) {
 
   const uint8_t note = note_for_position(row, col);
   active_notes[row][col] = note;
-  tracked_note_on(note);
+  if (arp_enabled) {
+    if (chord_latch && arp_scale_physical_count == 0) {
+      arp_clear_source();
+    }
+    ++arp_scale_physical_count;
+    arp_source_add(note);
+    arp_restart(false);
+  } else {
+    tracked_note_on(note);
+  }
 }
 
 static void release_note(uint8_t row, uint8_t col) {
@@ -707,7 +1128,17 @@ static void release_note(uint8_t row, uint8_t col) {
   }
 
   active_notes[row][col] = NO_ACTIVE_NOTE;
-  tracked_note_off(note);
+  if (arp_enabled) {
+    if (arp_scale_physical_count > 0) {
+      --arp_scale_physical_count;
+    }
+    if (!chord_latch) {
+      arp_source_remove(note);
+      arp_restart(false);
+    }
+  } else {
+    tracked_note_off(note);
+  }
 }
 
 static void release_tracked_notes(void) {
@@ -734,6 +1165,8 @@ static void release_tracked_notes(void) {
     pending_chord_notes[event].active = false;
   }
   previous_chord_note_count = 0;
+  arp_clear_source();
+  arp_scale_physical_count = 0;
 }
 
 static uint8_t chord_root_slot(uint8_t row, uint8_t col) {
@@ -1092,7 +1525,11 @@ static void stop_chord_slot(uint8_t slot) {
   cancel_pending_chord_notes(slot);
   for (uint8_t index = 0; index < chord->note_count; ++index) {
     if (chord->sent_mask & (1U << index)) {
-      tracked_note_off(chord->notes[index]);
+      if (arp_enabled) {
+        arp_source_remove(chord->notes[index]);
+      } else {
+        tracked_note_off(chord->notes[index]);
+      }
     }
   }
   chord->active = false;
@@ -1113,7 +1550,11 @@ static void send_chord_tone(uint8_t slot, uint8_t tone_index) {
       (chord->sent_mask & (1U << tone_index))) {
     return;
   }
-  tracked_note_on(chord->notes[tone_index]);
+  if (arp_enabled) {
+    arp_source_add(chord->notes[tone_index]);
+  } else {
+    tracked_note_on(chord->notes[tone_index]);
+  }
   chord->sent_mask |= (1U << tone_index);
 }
 
@@ -1147,7 +1588,7 @@ static void start_chord_slot(uint8_t slot, uint8_t root_note) {
       build_chord_notes(root_note, chord->notes, &chord->alternate_mask);
   chord->sent_mask = 0;
 
-  const uint8_t delay = chord_strum_delay();
+  const uint8_t delay = arp_enabled ? 0 : chord_strum_delay();
   const bool descending = chord_strum >= 4;
   const uint32_t now = timer_read32();
   for (uint8_t order = 0; order < chord->note_count; ++order) {
@@ -1163,6 +1604,9 @@ static void start_chord_slot(uint8_t slot, uint8_t root_note) {
   previous_chord_note_count = chord->note_count;
   for (uint8_t index = 0; index < chord->note_count; ++index) {
     previous_chord_notes[index] = chord->notes[index];
+  }
+  if (arp_enabled) {
+    arp_restart(false);
   }
 }
 
@@ -1432,13 +1876,132 @@ static void toggle_chord_latch(void) {
   chord_latch = !chord_latch;
   if (!chord_latch) {
     stop_all_chord_slots();
+    arp_clear_source();
   }
   start_chord_parameter_display('L', chord_latch ? 1 : 0, false,
                                 CHORD_DISPLAY_MS);
 }
 
+static void arp_copy_display_text(const char *text, bool program_memory,
+                                  bool pattern_preview) {
+  uint8_t length = 0;
+  while (length < sizeof(arp_display_text) - 1) {
+    const char character =
+        program_memory ? pgm_read_byte(text + length) : text[length];
+    if (character == '\0') {
+      break;
+    }
+    arp_display_text[length++] = character;
+  }
+  arp_display_text[length] = '\0';
+  arp_display_length = length;
+  arp_display_offset = ARP_DISPLAY_COLS;
+  arp_display_timer = timer_read32();
+  arp_display_holding = true;
+  arp_display_pattern_preview = false;
+  arp_display_reveal_pattern = pattern_preview;
+  arp_preview_step = 0;
+  arp_preview_step_timer = timer_read32();
+  for (uint8_t index = 0; index < ARP_DISPLAY_COLS; ++index) {
+    arp_preview_hit_timer[index] = 0;
+  }
+}
+
+static void arp_show_preview(void) {
+  arp_display_pattern_preview = true;
+  arp_display_reveal_pattern = true;
+  arp_preview_step = 0;
+  arp_preview_step_timer = 0;
+  for (uint8_t index = 0; index < ARP_DISPLAY_COLS; ++index) {
+    arp_preview_hit_timer[index] = 0;
+  }
+}
+
+static void arp_show_literal(const char *text) {
+  arp_copy_display_text(text, false, true);
+}
+
+static void arp_set_enabled(bool enabled) {
+  if (arp_enabled == enabled) {
+    return;
+  }
+  release_tracked_notes();
+  arp_enabled = enabled;
+  arp_restart(true);
+}
+
+static void arp_toggle_enabled(void) {
+  arp_set_enabled(!arp_enabled);
+  arp_show_literal(arp_enabled ? "ARP ON" : "ARP OFF");
+}
+
+static void arp_change_pattern(int8_t amount) {
+  arp_selected_pattern =
+      (arp_selected_pattern + amount + ARP_PATTERN_COUNT) % ARP_PATTERN_COUNT;
+  arp_restart(true);
+  arp_show_preview();
+}
+
+static void arp_change_division(int8_t amount) {
+  arp_division =
+      (arp_division + amount + ARP_DIVISION_COUNT) % ARP_DIVISION_COUNT;
+  arp_restart(true);
+  arp_copy_display_text(arp_division_names[arp_division], true, true);
+}
+
+static void arp_cycle_length(void) {
+  static const char *const labels[] = {"25", "50", "75", "100.1"};
+  arp_length_index = (arp_length_index + 1) % 4;
+  arp_show_literal(labels[arp_length_index]);
+}
+
+static void arp_cycle_octaves(void) {
+  // Keep the numeral aligned in one centered two-character field.
+  static const char *const labels[] = {" 0", "+1", "+2"};
+  arp_extra_octaves = (arp_extra_octaves + 1) % 3;
+  arp_restart(true);
+  arp_show_literal(labels[arp_extra_octaves]);
+}
+
+static void arp_cycle_modifier(void) {
+  arp_modifier = (arp_modifier + 1) % ARP_MODIFIER_COUNT;
+  arp_restart(true);
+  arp_copy_display_text(arp_modifier_names[arp_modifier], true, true);
+}
+
 void matrix_scan_user(void) {
   const uint32_t now = timer_read32();
+
+  if (dfu_reboot_requested) {
+    dfu_reboot_requested = false;
+    release_tracked_notes();
+    reset_keyboard();
+  }
+
+  if (arp_key_pressed && !arp_key_hold_handled &&
+      timer_elapsed32(arp_key_press_timer) >= ARP_HOLD_MS) {
+    arp_key_hold_handled = true;
+    arp_toggle_enabled();
+  }
+
+  if (arp_enabled && !arp_source_is_empty()) {
+    const uint16_t length_per_mille = arp_length_per_mille();
+    if (arp_output_active && !arp_gate_is_legato(length_per_mille) &&
+        timer_elapsed32(arp_output_off_timer) >=
+            arp_gate_milliseconds(arp_current_step_ms(),
+                                  length_per_mille)) {
+      arp_stop_output();
+    }
+    const bool host_clock_active = arp_host_clock_active_now();
+    if (arp_clock_driver_for_state(arp_host_clock, host_clock_active,
+                                   arp_host_transport_running) ==
+            ARP_CLOCK_DRIVER_INTERNAL &&
+        timer_elapsed32(arp_internal_step_timer) >= arp_current_step_ms()) {
+      arp_internal_step_timer = now;
+      arp_play_step();
+    }
+  }
+
   for (uint8_t event = 0; event < CHORD_PENDING_EVENT_COUNT; ++event) {
     pending_chord_note_t *pending = &pending_chord_notes[event];
     if (pending->active && (int32_t)(now - pending->due_at) >= 0) {
@@ -1518,11 +2081,22 @@ void keyboard_post_init_user(void) {
       active_notes[row][col] = NO_ACTIVE_NOTE;
     }
   }
+  midi_register_realtime_callback(&midi_device, arp_realtime_callback);
+  midi_register_sysex_callback(&midi_device, midi_pad_sysex_callback);
+  arp_show_preview();
 }
 
 layer_state_t layer_state_set_user(layer_state_t state) {
-  if (get_highest_layer(state) != SCALE_LAYER) {
+  static uint8_t previous_layer = SCALE_LAYER;
+  const uint8_t next_layer = get_highest_layer(state);
+  if (next_layer != previous_layer) {
     release_tracked_notes();
+    layer_transition_active = true;
+    layer_transition_timer = timer_read32();
+    if (next_layer != ANIMATION_PROTOTYPE_LAYER) {
+      animation_prototype_active = false;
+    }
+    previous_layer = next_layer;
   }
   return state;
 }
@@ -1537,6 +2111,101 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
   }
 
   switch (keycode) {
+  case ANIMATION_TRIGGER:
+    if (record->event.pressed) {
+      animation_prototype =
+          ((row * MATRIX_COLS) + col) % ANIMATION_PROTOTYPE_COUNT;
+      animation_origin_row = row;
+      animation_origin_col = col;
+      animation_prototype_timer = timer_read32();
+      animation_prototype_active = true;
+    }
+    return false;
+
+  case MD_ARP:
+    if (record->event.pressed) {
+      arp_key_pressed = true;
+      arp_key_hold_handled = false;
+      arp_key_press_timer = timer_read32();
+    } else {
+      arp_key_pressed = false;
+      if (!arp_key_hold_handled) {
+        arp_show_preview();
+        layer_move(ARP_SETTINGS_LAYER);
+      }
+    }
+    return false;
+
+  case ARP_PATTERN_PREV:
+    if (record->event.pressed) {
+      arp_change_pattern(-1);
+    }
+    return false;
+
+  case ARP_ENABLE:
+    if (record->event.pressed) {
+      arp_toggle_enabled();
+    }
+    return false;
+
+  case ARP_PATTERN_NEXT:
+    if (record->event.pressed) {
+      arp_change_pattern(1);
+    }
+    return false;
+
+  case ARP_DIVISION_PREV:
+    if (record->event.pressed) {
+      arp_change_division(-1);
+    }
+    return false;
+
+  case ARP_DIVISION_NEXT:
+    if (record->event.pressed) {
+      arp_change_division(1);
+    }
+    return false;
+
+  case ARP_LENGTH:
+    if (record->event.pressed) {
+      arp_cycle_length();
+    }
+    return false;
+
+  case ARP_OCTAVES:
+    if (record->event.pressed) {
+      arp_cycle_octaves();
+    }
+    return false;
+
+  case ARP_RETRIGGER:
+    if (record->event.pressed) {
+      arp_retrigger = !arp_retrigger;
+      arp_show_literal(arp_retrigger ? "RETRIG ON" : "RETRIG OFF");
+    }
+    return false;
+
+  case ARP_LATCH:
+    if (record->event.pressed) {
+      toggle_chord_latch();
+      arp_show_literal(chord_latch ? "LATCH ON" : "LATCH OFF");
+    }
+    return false;
+
+  case ARP_HOST_CLOCK:
+    if (record->event.pressed) {
+      arp_host_clock = !arp_host_clock;
+      arp_restart(true);
+      arp_show_literal(arp_host_clock ? "HOST ON" : "HOST OFF");
+    }
+    return false;
+
+  case ARP_DOT_TRIPLET:
+    if (record->event.pressed) {
+      arp_cycle_modifier();
+    }
+    return false;
+
   case MD_NOTE:
     if (record->event.pressed) {
       press_note(row, col);
@@ -1734,11 +2403,39 @@ static void update_display_timers(void) {
 }
 
 static bool font_pixel(char character, uint8_t row, uint8_t col) {
-  if (character < 'A' || character > 'Z' || row >= DISPLAY_HEIGHT ||
-      col >= GLYPH_WIDTH) {
+  static const uint8_t PROGMEM digits[10][DISPLAY_HEIGHT] = {
+      {0x40, 0xA0, 0xA0, 0xA0, 0xA0, 0x40},
+      {0x40, 0xC0, 0x40, 0x40, 0x40, 0xE0},
+      {0xC0, 0x20, 0x20, 0x40, 0x80, 0xE0},
+      {0xC0, 0x20, 0x40, 0x20, 0x20, 0xC0},
+      {0xA0, 0xA0, 0xE0, 0x20, 0x20, 0x20},
+      {0xE0, 0x80, 0xC0, 0x20, 0x20, 0xC0},
+      {0x60, 0x80, 0xC0, 0xA0, 0xA0, 0x40},
+      {0xE0, 0x20, 0x40, 0x40, 0x40, 0x40},
+      {0x40, 0xA0, 0x40, 0xA0, 0xA0, 0x40},
+      {0x40, 0xA0, 0x60, 0x20, 0x20, 0xC0},
+  };
+  static const uint8_t PROGMEM slash[DISPLAY_HEIGHT] = {0x20, 0x20, 0x40,
+                                                        0x40, 0x80, 0x80};
+  static const uint8_t PROGMEM plus[DISPLAY_HEIGHT] = {0x00, 0x40, 0xE0,
+                                                       0x40, 0x00, 0x00};
+  static const uint8_t PROGMEM period[DISPLAY_HEIGHT] = {0x00, 0x00, 0x00,
+                                                         0x00, 0x00, 0x20};
+  if (row >= DISPLAY_HEIGHT || col >= GLYPH_WIDTH) {
     return false;
   }
-  const uint8_t row_bits = pgm_read_byte(&font_3x6[character - 'A'][row]);
+  uint8_t row_bits = 0;
+  if (character >= 'A' && character <= 'Z') {
+    row_bits = pgm_read_byte(&font_3x6[character - 'A'][row]);
+  } else if (character >= '0' && character <= '9') {
+    row_bits = pgm_read_byte(&digits[character - '0'][row]);
+  } else if (character == '/') {
+    row_bits = pgm_read_byte(&slash[row]);
+  } else if (character == '+') {
+    row_bits = pgm_read_byte(&plus[row]);
+  } else if (character == '.') {
+    row_bits = pgm_read_byte(&period[row]);
+  }
   return row_bits & (0x80 >> col);
 }
 
@@ -1844,7 +2541,242 @@ static void set_scale_selector_led(uint8_t slot) {
 
 static void clear_all_leds(void) {
   for (uint8_t led = 0; led < RGB_MATRIX_LED_COUNT; ++led) {
-    rgb_matrix_set_color(led, 0, 0, 0);
+    set_led_rgb(led, 0, 0, 0);
+  }
+}
+
+static uint8_t animation_distance(uint8_t left, uint8_t right) {
+  return left > right ? left - right : right - left;
+}
+
+static void set_animation_white(uint8_t row, uint8_t col,
+                                uint8_t brightness) {
+  set_led_rgb(led_index(row, col), brightness, brightness, brightness);
+}
+
+static void render_animation_prototype_idle(void) {
+  for (uint8_t row = 0; row < MATRIX_ROWS; ++row) {
+    for (uint8_t col = 0; col < MATRIX_COLS; ++col) {
+      if (row == 0 && col == 9) {
+        continue;
+      }
+      const uint8_t pattern =
+          ((row * MATRIX_COLS) + col) % ANIMATION_PROTOTYPE_COUNT;
+      set_chord_state_color(row, col, pattern + 1, 72);
+    }
+  }
+  set_key_color(0, 9, COLOR_QUATERNARY,
+                DEFAULT_PAD_BRIGHTNESS); // Return to layer menu
+}
+
+static void render_animation_prototype(void) {
+  clear_all_leds();
+  if (!animation_prototype_active) {
+    render_animation_prototype_idle();
+    return;
+  }
+
+  const uint32_t elapsed = timer_elapsed32(animation_prototype_timer);
+  if (elapsed >= ANIMATION_PROTOTYPE_DURATION_MS) {
+    animation_prototype_active = false;
+    render_animation_prototype_idle();
+    return;
+  }
+
+  // A normalized out-and-back position: 0..9..0 over the full animation.
+  const uint8_t phase =
+      (elapsed * 20U) / ANIMATION_PROTOTYPE_DURATION_MS;
+  const uint8_t position = phase < 10 ? phase : 19 - phase;
+
+  for (uint8_t row = 0; row < MATRIX_ROWS; ++row) {
+    for (uint8_t col = 0; col < MATRIX_COLS; ++col) {
+      const uint8_t rainbow = ((row + col + phase) % 12) + 1;
+      switch (animation_prototype) {
+      case 0: { // Horizontal scanner with a two-column palette trail.
+        const uint8_t distance = animation_distance(col, position);
+        if (distance == 0) {
+          set_animation_white(row, col, PRESSED_PAD_BRIGHTNESS);
+        } else if (distance == 1) {
+          set_key_color(row, col, COLOR_SECONDARY, ROOT_NOTE_BRIGHTNESS);
+        } else if (distance == 2) {
+          set_key_color(row, col, COLOR_TERTIARY,
+                        DEFAULT_PAD_BRIGHTNESS / 2);
+        }
+        break;
+      }
+
+      case 1: { // Vertical scanner.
+        const uint8_t distance = animation_distance(row, position);
+        if (distance == 0) {
+          set_animation_white(row, col, PRESSED_PAD_BRIGHTNESS);
+        } else if (distance == 1) {
+          set_key_color(row, col, COLOR_QUATERNARY, ROOT_NOTE_BRIGHTNESS);
+        } else if (distance == 2) {
+          set_key_color(row, col, COLOR_PRIMARY,
+                        DEFAULT_PAD_BRIGHTNESS / 2);
+        }
+        break;
+      }
+
+      case 2: { // Diagonal fill wipe, then erase back to the origin.
+        const uint8_t edge = position * 2;
+        const uint8_t diagonal = row + col;
+        if (diagonal <= edge) {
+          if (animation_distance(diagonal, edge) <= 1) {
+            set_animation_white(row, col, PRESSED_PAD_BRIGHTNESS);
+          } else {
+            set_key_color(row, col, COLOR_TERTIARY,
+                          DEFAULT_PAD_BRIGHTNESS);
+          }
+        }
+        break;
+      }
+
+      case 3: { // Split from the center columns and fold back inward.
+        const uint8_t center_distance =
+            col < 5 ? 4 - col : col - 5;
+        const uint8_t edge = position / 2;
+        if (center_distance <= edge) {
+          if (center_distance == edge) {
+            set_animation_white(row, col, PRESSED_PAD_BRIGHTNESS);
+          } else {
+            set_key_color(row, col, COLOR_QUINARY,
+                          DEFAULT_PAD_BRIGHTNESS);
+          }
+        }
+        break;
+      }
+
+      case 4: { // Square ripple centered on the pad that launched it.
+        const uint8_t row_distance =
+            animation_distance(row, animation_origin_row);
+        const uint8_t col_distance =
+            animation_distance(col, animation_origin_col);
+        const uint8_t distance =
+            row_distance > col_distance ? row_distance : col_distance;
+        if (distance == position) {
+          set_animation_white(row, col, PRESSED_PAD_BRIGHTNESS);
+        } else if (distance + 1 == position) {
+          set_chord_state_color(row, col, rainbow,
+                                DEFAULT_PAD_BRIGHTNESS);
+        }
+        break;
+      }
+
+      case 5: { // Deterministic checker dissolve and reconstruction.
+        const uint8_t order = ((row * 7) + (col * 3)) % 10;
+        if (order < position) {
+          set_key_color(row, col, COLOR_SECONDARY,
+                        DEFAULT_PAD_BRIGHTNESS);
+        } else if (order == position) {
+          set_animation_white(row, col, PRESSED_PAD_BRIGHTNESS);
+        }
+        break;
+      }
+
+      case 6: { // Comet following a serpentine path through all 100 pads.
+        const uint8_t key_position =
+            (row * MATRIX_COLS) + ((row & 1U) ? 9 - col : col);
+        const uint8_t head = (elapsed * 100U) /
+                             ANIMATION_PROTOTYPE_DURATION_MS;
+        if (key_position <= head && head - key_position < 8) {
+          const uint8_t trail = head - key_position;
+          if (trail == 0) {
+            set_animation_white(row, col, PRESSED_PAD_BRIGHTNESS);
+          } else {
+            set_chord_state_color(row, col, rainbow,
+                                  ROOT_NOTE_BRIGHTNESS - (trail * 24));
+          }
+        }
+        break;
+      }
+
+      default: // Full-grid rainbow wave.
+        set_chord_state_color(row, col, rainbow,
+                              DEFAULT_PAD_BRIGHTNESS);
+        if (((row + col + phase) % 10) == 0) {
+          set_animation_white(row, col, PRESSED_PAD_BRIGHTNESS);
+        }
+        break;
+      }
+    }
+  }
+}
+
+static uint8_t interpolate_component(uint8_t from, uint8_t to,
+                                     uint8_t amount) {
+  return from + (((int16_t)to - from) * amount) / 255;
+}
+
+static void transition_wipe_color(uint32_t elapsed, uint8_t *red,
+                                  uint8_t *green, uint8_t *blue) {
+  const uint32_t color_position =
+      (elapsed * (PALETTE_COLOR_COUNT - 1) * 256U) /
+      LAYER_TRANSITION_DURATION_MS;
+  uint8_t from_index = color_position >> 8;
+  uint8_t amount = color_position & 0xFF;
+  if (from_index >= PALETTE_COLOR_COUNT - 1) {
+    from_index = PALETTE_COLOR_COUNT - 2;
+    amount = 255;
+  }
+
+  const palette_color_t *from = &palettes[selected_palette][from_index];
+  const palette_color_t *to = &palettes[selected_palette][from_index + 1];
+  *red = interpolate_component(pgm_read_byte(&from->red),
+                               pgm_read_byte(&to->red), amount);
+  *green = interpolate_component(pgm_read_byte(&from->green),
+                                 pgm_read_byte(&to->green), amount);
+  *blue = interpolate_component(pgm_read_byte(&from->blue),
+                                pgm_read_byte(&to->blue), amount);
+}
+
+static void render_layer_transition(void) {
+  if (!layer_transition_active) {
+    return;
+  }
+
+  const uint32_t elapsed = timer_elapsed32(layer_transition_timer);
+  if (elapsed >= LAYER_TRANSITION_DURATION_MS) {
+    layer_transition_active = false;
+    return;
+  }
+
+  const uint32_t half_duration = LAYER_TRANSITION_DURATION_MS / 2;
+  const bool covering_old_layer = elapsed < half_duration;
+  const uint32_t half_elapsed =
+      covering_old_layer ? elapsed : elapsed - half_duration;
+  const uint8_t progress = (half_elapsed * 20U) / half_duration;
+  const int8_t edge =
+      covering_old_layer ? progress : 18 - (int8_t)progress;
+
+  uint8_t wipe_red;
+  uint8_t wipe_green;
+  uint8_t wipe_blue;
+  transition_wipe_color(elapsed, &wipe_red, &wipe_green, &wipe_blue);
+  wipe_red = scale_component(wipe_red, ROOT_NOTE_BRIGHTNESS);
+  wipe_green = scale_component(wipe_green, ROOT_NOTE_BRIGHTNESS);
+  wipe_blue = scale_component(wipe_blue, ROOT_NOTE_BRIGHTNESS);
+
+  for (uint8_t row = 0; row < MATRIX_ROWS; ++row) {
+    for (uint8_t col = 0; col < MATRIX_COLS; ++col) {
+      const uint8_t led = led_index(row, col);
+      const int8_t diagonal = row + col;
+      const bool wipe_covers_key = diagonal <= edge;
+
+      if (covering_old_layer && !wipe_covers_key) {
+        rgb_matrix_set_color(led, layer_transition_from[led].red,
+                             layer_transition_from[led].green,
+                             layer_transition_from[led].blue);
+      } else if (wipe_covers_key) {
+        if (diagonal == edge || diagonal + 1 == edge) {
+          rgb_matrix_set_color(led, PRESSED_PAD_BRIGHTNESS,
+                               PRESSED_PAD_BRIGHTNESS,
+                               PRESSED_PAD_BRIGHTNESS);
+        } else {
+          rgb_matrix_set_color(led, wipe_red, wipe_green, wipe_blue);
+        }
+      }
+    }
   }
 }
 
@@ -1894,8 +2826,167 @@ static void render_performance_top_row(enum layers active_layer) {
   set_key_color(0, 4,
                 active_layer == CHORD_LAYER ? COLOR_TERTIARY : COLOR_PRIMARY,
                 PERFORMANCE_NAV_BRIGHTNESS);
+  set_fixed_status_color(0, 5, arp_enabled, PERFORMANCE_NAV_BRIGHTNESS);
   set_key_color(0, 9, COLOR_QUATERNARY,
                 PERFORMANCE_NAV_BRIGHTNESS); // Settings
+}
+
+static uint16_t arp_display_text_width(void) {
+  return arp_display_length == 0 ? 0 : (arp_display_length * GLYPH_ADVANCE) - 1;
+}
+
+static void update_arp_display(void) {
+  if (arp_display_pattern_preview) {
+    const uint32_t step_ms = arp_current_step_ms();
+    if (timer_elapsed32(arp_preview_step_timer) >= step_ms) {
+      const uint8_t length =
+          arp_pattern_length(arp_selected_pattern, ARP_PREVIEW_ROWS);
+      const uint8_t column = arp_preview_step % ARP_DISPLAY_COLS;
+      arp_preview_hit_timer[column] = timer_read32();
+      // 60 is divisible by the 10 display columns and every sequence length
+      // produced by the four-note preview, so both phases wrap together.
+      arp_preview_step = length == 0 ? 0 : (arp_preview_step + 1) % 60;
+      arp_preview_step_timer = timer_read32();
+    }
+    return;
+  }
+
+  const uint16_t width = arp_display_text_width();
+  if (width <= ARP_DISPLAY_COLS) {
+    if (timer_elapsed32(arp_display_timer) >= ARP_STATIC_ANNOUNCEMENT_MS) {
+      arp_display_pattern_preview = true;
+      arp_preview_step = 0;
+      arp_preview_step_timer = 0;
+    }
+    return;
+  }
+
+  const uint16_t interval =
+      arp_display_holding ? TEXT_SCROLL_HOLD_MS : TEXT_SCROLL_STEP_MS;
+  if (timer_elapsed32(arp_display_timer) < interval) {
+    return;
+  }
+  ++arp_display_offset;
+  arp_display_timer = timer_read32();
+  arp_display_holding = false;
+
+  if (arp_display_reveal_pattern &&
+      arp_display_offset >= ARP_DISPLAY_COLS + width) {
+    arp_display_pattern_preview = true;
+    arp_preview_step = 0;
+    arp_preview_step_timer = 0;
+    return;
+  }
+  const uint16_t cycle = ARP_DISPLAY_COLS + width + ARP_DISPLAY_COLS;
+  if (cycle > 0) {
+    arp_display_offset %= cycle;
+  }
+}
+
+static void render_arp_text(void) {
+  const uint16_t width = arp_display_text_width();
+  const uint8_t static_start =
+      width <= ARP_DISPLAY_COLS ? (ARP_DISPLAY_COLS - width) / 2 : 0;
+  for (uint8_t view_col = 0; view_col < ARP_DISPLAY_COLS; ++view_col) {
+    const int16_t source_col =
+        width <= ARP_DISPLAY_COLS
+            ? (int16_t)view_col - static_start
+            : (int16_t)arp_display_offset + view_col - ARP_DISPLAY_COLS;
+    if (source_col < 0 || source_col >= width) {
+      continue;
+    }
+    const uint8_t glyph_index = source_col / GLYPH_ADVANCE;
+    const uint8_t glyph_col = source_col % GLYPH_ADVANCE;
+    if (glyph_col >= GLYPH_WIDTH) {
+      continue;
+    }
+    for (uint8_t row = 0; row < ARP_DISPLAY_ROWS; ++row) {
+      if (font_pixel(arp_display_text[glyph_index], row, glyph_col)) {
+        set_key_color(ARP_DISPLAY_FIRST_ROW + row, view_col, COLOR_TERTIARY,
+                      DEFAULT_PAD_BRIGHTNESS);
+      }
+    }
+  }
+}
+
+static void set_arp_preview_fade(uint8_t row, uint8_t col,
+                                 uint32_t elapsed, uint32_t duration) {
+  const palette_color_t *color = &palettes[selected_palette][COLOR_TERTIARY];
+  const uint8_t base_red = pgm_read_byte(&color->red);
+  const uint8_t base_green = pgm_read_byte(&color->green);
+  const uint8_t base_blue = pgm_read_byte(&color->blue);
+  if (elapsed >= duration) {
+    set_key_color(row, col, COLOR_TERTIARY, DEFAULT_PAD_BRIGHTNESS);
+    return;
+  }
+  const uint16_t remaining = duration - elapsed;
+  const uint8_t red = base_red + (((uint16_t)(255 - base_red) * remaining) / duration);
+  const uint8_t green = base_green + (((uint16_t)(255 - base_green) * remaining) / duration);
+  const uint8_t blue = base_blue + (((uint16_t)(255 - base_blue) * remaining) / duration);
+  set_led_rgb(led_index(row, col), red, green, blue);
+}
+
+static void render_arp_preview(void) {
+  const uint8_t length =
+      arp_pattern_length(arp_selected_pattern, ARP_PREVIEW_ROWS);
+  uint32_t fade_ms = arp_gate_milliseconds(
+      arp_current_step_ms(),
+      arp_length_per_mille());
+  if (fade_ms < ARP_PREVIEW_MIN_FADE_MS) {
+    fade_ms = ARP_PREVIEW_MIN_FADE_MS;
+  }
+  if (length == 0) {
+    return;
+  }
+  for (uint8_t col = 0; col < ARP_DISPLAY_COLS; ++col) {
+    const uint8_t first_note =
+        arp_selected_pattern == ARP_PATTERN_CHORD
+            ? 0
+            : arp_pattern_note_index(arp_selected_pattern, col,
+                                     ARP_PREVIEW_ROWS);
+    const uint8_t note_count =
+        arp_selected_pattern == ARP_PATTERN_CHORD ? ARP_PREVIEW_ROWS : 1;
+    for (uint8_t offset = 0; offset < note_count; ++offset) {
+      const uint8_t note_index = first_note + offset;
+      const uint8_t row =
+          ARP_PREVIEW_FIRST_ROW + ARP_PREVIEW_ROWS - 1 - note_index;
+      if (arp_preview_hit_timer[col] != 0) {
+        set_arp_preview_fade(row, col,
+                             timer_elapsed32(arp_preview_hit_timer[col]),
+                             fade_ms);
+      } else {
+        set_key_color(row, col, COLOR_TERTIARY, DEFAULT_PAD_BRIGHTNESS);
+      }
+    }
+  }
+}
+
+static void render_arp_settings_layer(void) {
+  clear_all_leds();
+  update_arp_display();
+  render_performance_top_row(ARP_SETTINGS_LAYER);
+
+  set_fixed_status_color(2, 0, arp_enabled, DEFAULT_PAD_BRIGHTNESS);
+  set_key_color(3, 0, COLOR_PRIMARY, DEFAULT_PAD_BRIGHTNESS);
+  set_key_color(3, 1, COLOR_QUINARY, DEFAULT_PAD_BRIGHTNESS);
+  set_key_color(3, 2, COLOR_PRIMARY, DEFAULT_PAD_BRIGHTNESS);
+  set_key_color(3, 3, COLOR_QUINARY, DEFAULT_PAD_BRIGHTNESS);
+  set_chord_state_color(3, 4, arp_length_index + 1, DEFAULT_PAD_BRIGHTNESS);
+  set_chord_state_color(3, 5, arp_extra_octaves + 1, DEFAULT_PAD_BRIGHTNESS);
+  set_fixed_status_color(3, 6, arp_retrigger, DEFAULT_PAD_BRIGHTNESS);
+  set_fixed_status_color(3, 7, chord_latch, DEFAULT_PAD_BRIGHTNESS);
+  set_fixed_status_color(3, 8, arp_host_clock, DEFAULT_PAD_BRIGHTNESS);
+  if (arp_modifier == ARP_MODIFIER_OFF) {
+    set_key_color(3, 9, COLOR_PRIMARY, DEFAULT_PAD_BRIGHTNESS);
+  } else {
+    set_chord_state_color(3, 9, arp_modifier, DEFAULT_PAD_BRIGHTNESS);
+  }
+
+  if (arp_display_pattern_preview) {
+    render_arp_preview();
+  } else {
+    render_arp_text();
+  }
 }
 
 static void render_scale_layer(void) {
@@ -2126,8 +3217,13 @@ static void render_chord_root_grid(void) {
     for (uint8_t col = CHORD_ROOT_FIRST_COL; col < MATRIX_COLS; ++col) {
       const uint8_t note = chord_root_note_for_position(row, col);
       const uint8_t slot = chord_root_slot(row, col);
-      if (active_chords[slot].active) {
+      if (arp_enabled && active_note_counts[note] > 0) {
         set_key_color(row, col, COLOR_SECONDARY, PRESSED_PAD_BRIGHTNESS);
+      } else if (active_chords[slot].active) {
+        set_key_color(row, col,
+                      arp_enabled ? COLOR_QUINARY : COLOR_SECONDARY,
+                      arp_enabled ? ROOT_NOTE_BRIGHTNESS
+                                  : PRESSED_PAD_BRIGHTNESS);
       } else if (note_is_an_alternate_indicator(note)) {
         set_key_color(row, col, COLOR_QUATERNARY, DEFAULT_PAD_BRIGHTNESS);
       } else if (note_is_an_active_chord_tone(note)) {
@@ -2207,15 +3303,32 @@ static void render_chord_layer(void) {
 
 static void render_layer_select(void) {
   clear_all_leds();
-  set_key_color(0, 0, COLOR_PRIMARY, DEFAULT_PAD_BRIGHTNESS); // Scale
-  set_key_color(0, 1, COLOR_SECONDARY,
-                DEFAULT_PAD_BRIGHTNESS); // Chord placeholder
+  set_key_color(0, 0, COLOR_SECONDARY,
+                DEFAULT_PAD_BRIGHTNESS); // Empty 1: animation prototype
+  set_key_color(0, 1, COLOR_PRIMARY,
+                DEFAULT_PAD_BRIGHTNESS); // Empty 2
+  set_key_color(0, 2, COLOR_TERTIARY,
+                DEFAULT_PAD_BRIGHTNESS); // MIDI
+}
+
+static void render_empty_placeholder_layer(void) {
+  clear_all_leds();
+  set_key_color(0, 9, COLOR_QUATERNARY,
+                DEFAULT_PAD_BRIGHTNESS); // Return to layer menu
 }
 
 static void render_physically_pressed_keys(void) {
+  const uint8_t active_layer = get_highest_layer(layer_state);
   for (uint8_t row = 0; row < MATRIX_ROWS; ++row) {
     for (uint8_t col = 0; col < MATRIX_COLS; ++col) {
       if (matrix_is_on(row, col)) {
+        const bool scale_note = active_layer == SCALE_LAYER && row > 0;
+        const bool chord_root =
+            active_layer == CHORD_LAYER && row >= CHORD_ROOT_FIRST_ROW &&
+            col >= CHORD_ROOT_FIRST_COL;
+        if (arp_enabled && (scale_note || chord_root)) {
+          continue;
+        }
         set_key_color(row, col, COLOR_SECONDARY, PRESSED_PAD_BRIGHTNESS);
       }
     }
@@ -2230,6 +3343,15 @@ bool rgb_matrix_indicators_user(void) {
   case LAYER_SELECT_LAYER:
     render_layer_select();
     break;
+  case ARP_SETTINGS_LAYER:
+    render_arp_settings_layer();
+    break;
+  case ANIMATION_PROTOTYPE_LAYER:
+    render_animation_prototype();
+    break;
+  case EMPTY_PLACEHOLDER_LAYER:
+    render_empty_placeholder_layer();
+    break;
   case CHORD_LAYER:
     render_chord_layer();
     break;
@@ -2237,6 +3359,7 @@ bool rgb_matrix_indicators_user(void) {
     render_scale_layer();
     break;
   }
+  render_layer_transition();
   render_physically_pressed_keys();
   return false;
 }

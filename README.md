@@ -232,3 +232,29 @@ built for `keychron/c100_8k`.
 
 GPL-2.0-or-later, matching QMK Firmware. See [LICENSE](LICENSE) and
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## One-command flashing on Linux
+
+Install the included device-access rule once so `dfu-util` can use the C100's
+bootloader without `sudo` or a password:
+
+```sh
+sudo install -Dm644 udev/50-keychron-c100-dfu.rules \
+  /etc/udev/rules.d/50-keychron-c100-dfu.rules
+sudo udevadm control --reload-rules
+```
+
+The rule takes effect the next time the keyboard enters DFU. For the first
+firmware installation, enter DFU manually by holding the top-left key while
+connecting USB or by pressing the reset button under the spacebar position.
+Then run:
+
+```sh
+make flash QMK_HOME=../qmk_firmware
+```
+
+After that first installation, the same command handles the complete update:
+it builds the firmware, asks the running keyboard to restart into DFU over its
+USB MIDI connection, waits for the bootloader, flashes without elevation, and
+confirms that the C100 reconnects. Keep the keyboard connected directly over
+USB while flashing. The command requires `amidi`, `dfu-util`, and `lsusb`.

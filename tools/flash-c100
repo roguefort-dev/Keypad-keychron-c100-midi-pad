@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+project_dir=$(cd -- "$script_dir/.." && pwd)
+firmware=${1:-"$project_dir/keychron_c100_8k_midi_pad.bin"}
+
+if [[ ! -f "$firmware" ]]; then
+  echo "Firmware not found: $firmware" >&2
+  exit 1
+fi
+
+dfu_found=false
+if lsusb -d 2e3c:df11 >/dev/null 2>&1; then
+  echo "Keychron C100 8K is already in DFU mode."
+  dfu_found=true
+else
+  midi_port=$(amidi -l | awk '/Keychron C100 8K MIDI/ { print $2; exit }')
+  if [[ -z "$midi_port" ]]; then
+    echo "Keychron C100 8K MIDI port not found." >&2
+    exit 1
+  fi
+
+  echo "Requesting DFU mode through $midi_port..."
+  amidi -p "$midi_port" -S 'F0 7D 43 31 30 30 44 46 55 F7'
+
+  for _attempt in $(seq 1 50); do
+    if lsusb -d 2e3c:df11 >/dev/null 2>&1; then
+      dfu_found=true
+      break
+    fi
+    sleep 0.1
+  done
+fi
+
+if [[ "$dfu_found" != true ]]; then
+  echo "The keyboard did not enter DFU mode." >&2
+  echo "This firmware may predate the host-triggered DFU command." >&2
+  exit 1
+fi
+
+echo "Flashing $(basename -- "$firmware")..."
+set +e
+dfu-util -d 2e3c:df11 -a 0 -s 0x08000000:leave -D "$firmware"
+dfu_status=$?
+set -e
+
+# AT32 disconnects before dfu-util's final get_status and commonly returns 74
+# despite a successful write. Re-enumeration as the C100 is authoritative.
+for _attempt in $(seq 1 50); do
+  if lsusb -d 3434:042c >/dev/null 2>&1; then
+    echo "Flash complete; Keychron C100 8K reconnected."
+    exit 0
+  fi
+  sleep 0.1
+done
+
+echo "Flash did not re-enumerate (dfu-util exit $dfu_status)." >&2
+exit "$dfu_status"

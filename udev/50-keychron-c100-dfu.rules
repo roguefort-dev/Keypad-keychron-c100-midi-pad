@@ -1,0 +1,2 @@
+# Keychron C100 8K / Artery AT32 DFU bootloader
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="2e3c", ATTRS{idProduct}=="df11", TAG+="uaccess"
