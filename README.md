@@ -228,6 +228,9 @@ For Windows discovery, the firmware advertises the USB interface-association
 class required to group the MIDI function. See the
 [Windows MIDI guide](docs/windows-midi.md) for descriptor checks, the focused
 `make test-usb` regression check, and recovery from an existing device binding.
+The guide also includes a DAW input check (`python tools/check_windows_midi.py`)
+and the verified Windows MIDI service catalog-permission repair for cases
+where the device has a working driver but Windows publishes no MIDI ports.
 
 ## Flashing and recovery
 

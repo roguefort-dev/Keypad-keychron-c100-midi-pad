@@ -12,8 +12,9 @@ Linux nevertheless exposed its MIDI port.
 Microsoft requires the device descriptor triplet **`EF/02/01`** for Windows
 to recognize IADs and group their interfaces correctly. See Microsoft's
 [USB interface association descriptor documentation](https://learn.microsoft.com/en-us/windows-hardware/drivers/usbcon/usb-interface-association-descriptor).
-The mismatch is a concrete firmware defect and a likely explanation for
-Windows failing to expose MIDI; Windows hardware verification remains needed.
+The mismatch is a concrete firmware defect. A separate Windows catalog
+permission issue also prevented discovery on the tested Windows machine;
+its diagnosis and verified repair are described below.
 
 The connected C100 also negotiated **480 Mb/s high speed**, while QMK
 advertised **64-byte bulk MIDI endpoints**. USB 2.0 requires high-speed bulk
@@ -93,9 +94,21 @@ Qualifier. Both Audio Control and MIDI Streaming interfaces bound to
 USB requests returned the 159-byte Configuration with 512-byte endpoints and
 the 159-byte Other Speed Configuration with 64-byte endpoints. Full-speed
 operation has host-model coverage but has not been tested on a physical
-full-speed connection. Windows discovery still needs verification on Windows.
+full-speed connection. Windows discovery was subsequently verified after the
+host repair below, including a user-confirmed test in Bitwig Studio.
 
 ## Verify on Windows
+
+Check the actual WinMM input list that Windows DAWs can use:
+
+```powershell
+python tools/check_windows_midi.py
+```
+
+This read-only command prints inputs and outputs and returns success only if
+a `Keychron C100` input was enumerated successfully. `flash_c100.py --check`
+checks flashing availability and can succeed through its direct-driver
+fallback even when this DAW discovery check fails.
 
 1. Flash the new C100 firmware, reconnect USB, and reopen the MIDI monitor
    or DAW so it refreshes its available MIDI ports.
@@ -125,3 +138,95 @@ record the Windows version, C100 device/child Hardware Ids, Device Manager
 status/error code, and the device/configuration descriptors from a USB
 descriptor viewer. Those details distinguish a remaining descriptor issue
 from an existing driver binding or application port configuration.
+
+## Verified Windows MIDI service repair
+
+On **1 November 2026**, Windows 11 build 26300 exposed the C100's kernel MIDI
+stream but listed **zero WinMM inputs**. Re-enumerating the device and
+restarting MIDI Services did not fix discovery. Both the older USB Audio
+driver and the installed Microsoft `USBMidi2-ACX` driver loaded without a
+device error. The latter remains selected on the verified machine.
+
+A short ETW trace of `Microsoft.Windows.Midi2.MidiSrv` showed
+`CMidiDeviceManager::Initialize` rejecting every transport with
+**`0x800B0100` (`TRUST_E_NOSIGNATURE`)**. No transport DLLs loaded into the
+service. The MIDI files passed targeted `sfc /verifyfile` checks. Their
+original Microsoft catalog existed, contained the installed DLL hashes, and
+had a valid Microsoft Windows signature when checked as administrator.
+
+The failure was its **protected catalog ACL**: only SYSTEM and Administrators
+had access. `MidiSrv` runs as LocalService with its own service SID, so it
+could not read the catalog needed to verify its transport libraries.
+
+The affected file on this machine was:
+
+```text
+C:\Windows\System32\CatRoot\{F750E6C3-38EE-11D1-85E5-00C04FC295EE}\Microsoft-Windows-Client-Desktop-Required-Package~31bf3856ad364e35~amd64~~10.0.26100.9711.cat
+```
+
+After explicit approval, the repair added **Read** for **`NT SERVICE\MidiSrv`**
+to this one catalog and preserved its original permissions in a local backup.
+The catalog's SHA-256 stayed
+`5dbf9b2492ac417b7a017785a594fb10484e9f8946320e3138b3a53b1898d88a`.
+The original Microsoft signature remained valid; signing policy and trust
+stores were unchanged.
+
+After restarting `midisrv`, all registered transport DLLs loaded. An ordinary
+Windows user could enumerate `Keychron C100 8K` as both input and output.
+**The user confirmed that it works in Bitwig Studio.** No further Windows
+steps are required on that repaired installation.
+
+### Reproduce or repair the same permission fault
+
+Apply this procedure when the service trace shows the same signing failure
+and the catalog that actually signs the installed MIDI components has the
+SYSTEM/Administrators-only ACL. The catalog version above is specific to the
+verified installation; identify the correct installed catalog on another PC.
+The helper deliberately requires its exact path and never selects one by a
+wildcard or changes a whole directory.
+
+Close MIDI applications first. In an **administrator PowerShell**, inspect
+the diagnosed catalog, then apply the repair after reviewing that scope:
+
+```powershell
+$catalog = '<full path to the verified catalog for the installed MIDI components>'
+.\tools\repair-windows-midi-catalog.ps1 -CatalogPath $catalog
+.\tools\repair-windows-midi-catalog.ps1 -CatalogPath $catalog -Apply
+Restart-Service midisrv
+python tools/check_windows_midi.py
+```
+
+Without `-Apply`, the helper only inspects. It checks the catalog's location
+and Microsoft signature, recognizes the specific protected ACL, backs up its
+SDDL under `.cache/windows-midi-catalog/`, and grants only the service's Read
+permission. An existing service Read grant is left as-is. The helper never
+restarts Windows or services itself. Reopen the DAW and select the C100 MIDI
+input after the check passes.
+
+To reverse an application of this helper, restore the DACL from its backup
+in an administrator PowerShell, then restart MIDI Services:
+
+```powershell
+$backup = Get-Content '<backup JSON path printed by the helper>' -Raw | ConvertFrom-Json
+$acl = Get-Acl -LiteralPath $backup.CatalogPath
+$acl.SetSecurityDescriptorSddlForm($backup.OriginalSddl, [Security.AccessControl.AccessControlSections]::Access)
+Set-Acl -LiteralPath $backup.CatalogPath -AclObject $acl
+Restart-Service midisrv
+```
+
+This host permission repair is separate from choosing a USB class driver.
+Microsoft documents [switching between the installed MIDI class drivers](https://microsoft.github.io/MIDI/kb/how-to-switch-between-class-drivers/)
+and [the service's signature checks](https://microsoft.github.io/MIDI/kb/service-plugin-not-loaded/).
+The file checks used [SFC's per-file verification](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/sfc).
+
+### Focused tool tests
+
+```powershell
+python -m unittest discover -s tests -p windows_midi_discovery_test.py
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/windows_midi_catalog_test.ps1
+```
+
+These tests inject WinMM and filesystem/signature operations. They exercise
+missing inputs, native enumeration failures, backup-before-write ordering,
+the service-only Read grant, idempotence, and rejection of unrelated paths,
+unsigned catalogs and other ACL layouts without changing Windows permissions.

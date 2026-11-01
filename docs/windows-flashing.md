@@ -84,7 +84,7 @@ of Windows WinMM. Its device-access rule remains necessary.
 On 1 November 2026, setup installed the DFU WinUSB driver and the current
 `8fa188c` CI image was flashed. The live USB descriptor reports `EF/02/01`,
 with 512-byte bulk MIDI endpoints. Windows' audio driver exposes the MIDI
-stream, although WinMM still lists no C100 port on this installation.
+stream. Initially, WinMM listed no C100 port on this installation.
 
 A complete subsequent update succeeded through the kernel MIDI fallback as
 an ordinary, non-administrator Windows user: the running pad received SysEx,
@@ -94,6 +94,12 @@ tested image was 74,196 bytes including its DFU suffix, SHA-256
 `e1f4a12c3b200977198773ce066abca9fe794a87dab02966b4295259cfbe41c1`.
 The focused tests also cover native packet layout, output pointers, handle
 cleanup, cancellation and the transient WinUSB binding delay.
+
+The later [Windows MIDI service repair](windows-midi.md#verified-windows-midi-service-repair)
+restored DAW discovery on this same machine. WinMM now exposes the C100 input
+and output, and the user confirmed Bitwig Studio works. Check DAW visibility
+with `python tools/check_windows_midi.py`; the flashing check alone also
+accepts its direct-driver fallback.
 
 Sources: [WinMM SysEx API](https://learn.microsoft.com/en-us/windows/win32/api/mmeapi/nf-mmeapi-midioutlongmsg),
 [dfu-util Windows driver requirements](https://dfu-util.sourceforge.net/),
