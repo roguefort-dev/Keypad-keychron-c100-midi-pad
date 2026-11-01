@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+"""Prepare disposable C100 firmware for DWT cycle measurements; never flashes."""
+import argparse
+import pathlib
+import shutil
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+KEYMAP = pathlib.Path("keyboards/keychron/c100_8k/keymaps/midi_pad")
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("source", type=pathlib.Path, help="directory containing keymap.c and its headers")
+parser.add_argument("destination", type=pathlib.Path, help="disposable userspace directory")
+args = parser.parse_args()
+source = args.source.resolve()
+destination = args.destination.resolve()
+if destination.exists():
+    raise SystemExit("Destination already exists; choose a fresh directory.")
+target = destination / KEYMAP
+target.mkdir(parents=True)
+for path in source.iterdir():
+    if path.suffix in (".c", ".h", ".mk", ".inc"):
+        shutil.copy2(path, target)
+for name in ("Makefile", "qmk.json"):
+    shutil.copy2(ROOT / name, destination)
+text = (target / "keymap.c").read_text()
+text = text.replace("enum layers {", """static bool device_bench_requested;
+static void device_bench_run(void);
+
+enum layers {""", 1)
+text = text.replace("void matrix_scan_user(void) {", """void matrix_scan_user(void) {
+  if (device_bench_requested) {
+    device_bench_requested = false;
+    device_bench_run();
+    return;
+  }""", 1)
+needle = "  static const uint8_t command[] = {"
+hook = """  static uint8_t bench_position;
+  static const uint8_t bench_command[] =
+      {0xF0, 0x7D, 'C', '1', '0', '0', 'B', 'E', 'N', 'C', 'H', 0xF7};
+  if (start_byte == 0) bench_position = 0;
+  for (uint8_t i = 0; i < data_length; ++i) {
+    if (bench_position < sizeof(bench_command) &&
+        data[i] == bench_command[bench_position]) {
+      if (++bench_position == sizeof(bench_command))
+        device_bench_requested = true;
+    } else {
+      bench_position = sizeof(bench_command);
+    }
+  }
+"""
+assert text.count(needle) == 1
+text = text.replace(needle, hook + needle, 1)
+text += '\n#include "device_benchmark.h"\n'
+(target / "keymap.c").write_text(text)
+shutil.copy2(ROOT / "tests/device_benchmark.h", target)
+print(destination)

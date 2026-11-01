@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+"""Decode a complete tools/benchmark-device SysEx capture to cycle statistics."""
+import argparse
+import json
+import pathlib
+import statistics
+
+SCENARIOS = [
+    "scan_idle", "scan_arp_empty", "scan_arp_held", "rgb_scale", "rgb_chord_idle",
+    "rgb_chord_held", "voice_auto", "scan_strum_pending", "arp_list_8_sources",
+    "arp_list_saturated", "rgb_scale_with_driver_flush",
+]
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("capture", type=pathlib.Path)
+args = parser.parse_args()
+samples = {}
+complete = False
+for message in args.capture.read_bytes().split(bytes([0xF7])):
+    if not message.startswith(bytes([0xF0, 0x7D]) + b"C100P"):
+        continue
+    if len(message) == 8 and message[7] == 127:
+        complete = True
+    elif len(message) == 16:
+        scenario, sample = message[7:9]
+        iterations = sum(value << (7 * i) for i, value in enumerate(message[9:11]))
+        cycles = sum(value << (7 * i) for i, value in enumerate(message[11:16]))
+        if scenario >= len(SCENARIOS) or sample >= 5 or iterations == 0 or cycles == 0:
+            raise SystemExit("Invalid cycle sample")
+        if sample in samples.setdefault(scenario, {}):
+            raise SystemExit("Duplicate sample")
+        samples[scenario][sample] = cycles / iterations
+if not complete or len(samples) != len(SCENARIOS) or any(len(v) != 5 for v in samples.values()):
+    raise SystemExit("Incomplete capture: expected 11 scenarios with 5 samples each")
+report = []
+for scenario, name in enumerate(SCENARIOS):
+    values = list(samples[scenario].values())
+    report.append({"scenario": name, "median_cycles": statistics.median(values),
+                   "min_cycles": min(values), "max_cycles": max(values),
+                   "samples": values})
+print(json.dumps(report, indent=2))

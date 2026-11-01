@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+"""Benchmark the actual keymap against a Git revision and verify replay equivalence."""
+import argparse
+import csv
+import io
+import json
+import os
+import pathlib
+import platform
+import statistics
+import subprocess
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+KEYMAP = pathlib.Path("keyboards/keychron/c100_8k/keymaps/midi_pad")
+
+
+def run(args):
+    return subprocess.check_output(args, cwd=ROOT, text=True)
+
+
+def compile_keymap(source, output, flags):
+    subprocess.run(
+        [os.environ.get("CC", "cc"), "-std=gnu11", *flags,
+         "-Wall", "-Wextra", "-Werror",
+         "-I" + str(ROOT / "tests/host"), "-I" + str(source),
+         '-DQMK_KEYBOARD_H="qmk_keyboard.h"',
+         str(ROOT / "tests/performance.c"), str(ROOT / "tests/host/runtime.c"),
+         "-o", str(output)], check=True, cwd=ROOT)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--baseline-ref", default="HEAD")
+    parser.add_argument("--samples", type=int, default=7)
+    parser.add_argument("--optimization", choices=["O2", "Os"], default="Os")
+    parser.add_argument("--output", type=pathlib.Path, default=ROOT / ".build/performance/local")
+    args = parser.parse_args()
+    if args.samples < 1:
+        parser.error("--samples must be positive")
+    output = args.output.resolve()
+    baseline = output / "baseline"
+    baseline.mkdir(parents=True, exist_ok=True)
+    revision = run(["git", "rev-parse", "--verify", args.baseline_ref + "^{commit}"]).strip()
+    for name in run(["git", "ls-tree", "-r", "--name-only", revision, "--", str(KEYMAP)]).splitlines():
+        path = pathlib.Path(name)
+        if path.suffix in (".c", ".h", ".mk", ".inc"):
+            (baseline / path.name).write_text(run(["git", "show", revision + ":" + name]))
+    if hasattr(os, "sched_getaffinity"):
+        cpu = min(os.sched_getaffinity(0))
+        os.sched_setaffinity(0, {cpu})
+    else:
+        cpu = None
+    builds = {"baseline": baseline, "optimized": ROOT / KEYMAP}
+    replays = {}
+    for label, source in builds.items():
+        binary = output / ("before" if label == "baseline" else "after")
+        compile_keymap(source, binary, ["-" + args.optimization])
+        replays[label] = run([str(binary), "--replay"]).strip()
+    if len(set(replays.values())) != 1:
+        raise SystemExit("Replay mismatch:\n" + json.dumps(replays, indent=2))
+    print("Matching replay:", replays["optimized"], flush=True)
+    samples = {"baseline": [], "optimized": []}
+    for sample in range(args.samples):
+        for label in (["baseline", "optimized"] if sample % 2 == 0 else ["optimized", "baseline"]):
+            binary = output / ("before" if label == "baseline" else "after")
+            text = run([str(binary)])
+            (output / f"{label}-{sample}.csv").write_text(text)
+            samples[label].append(list(csv.DictReader(io.StringIO(text))))
+    results = []
+    for index, scenario in enumerate(samples["baseline"][0]):
+        values = {}
+        for label in samples:
+            times = [float(sample[index]["ns_per_operation"]) for sample in samples[label]]
+            values[label] = {"median_ns": statistics.median(times), "min_ns": min(times),
+                             "max_ns": max(times),
+                             "led_writes": float(samples[label][0][index]["led_writes_per_operation"])}
+        speedup = values["baseline"]["median_ns"] / values["optimized"]["median_ns"]
+        results.append({"scenario": scenario["scenario"], **values, "speedup": speedup})
+        print(f'{scenario["scenario"]:32} {values["baseline"]["median_ns"]:10.1f} -> '
+              f'{values["optimized"]["median_ns"]:10.1f} ns  {speedup:6.2f}x')
+    report = {
+        "revision": revision, "compiler": run([os.environ.get("CC", "cc"), "--version"]).splitlines()[0],
+        "platform": platform.platform(), "cpu": cpu, "optimization": args.optimization,
+        "samples": args.samples, "replay": replays["optimized"], "results": results,
+    }
+    (output / "results.json").write_text(json.dumps(report, indent=2) + "\n")
+    print("Raw samples and results:", output)
+
+
+if __name__ == "__main__":
+    main()

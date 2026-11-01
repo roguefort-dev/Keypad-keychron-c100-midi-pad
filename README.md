@@ -204,8 +204,18 @@ The resulting file is `keychron_c100_8k_midi_pad.bin` in this repository's
 root. GitHub Actions also builds the firmware after each push and publishes the
 binary through the repository workflow.
 
-The current build uses 67,062 bytes of the target's verified 128 KiB flash
-region (about 50%).
+The current build uses 73,982 bytes of the target's verified 128 KiB flash
+region (56.4%).
+
+## Performance and regression checks
+
+Run `make test` for the logic tests and deterministic MIDI/LED replay,
+`make test-sanitize` for memory/undefined-behavior checks, and `make benchmark`
+for a repeated local comparison against HEAD. The benchmark also verifies that
+the before/after replay agrees.
+
+The [performance report](docs/performance/README.md) includes measured local and
+on-device improvements, memory costs, raw results, and reproduction commands.
 
 ## Test MIDI after flashing
 

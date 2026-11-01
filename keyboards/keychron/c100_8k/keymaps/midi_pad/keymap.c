@@ -8,6 +8,8 @@
 
 #include "chord_degree_logic.h"
 #include "arp_logic.h"
+#include "note_pool.h"
+#include "pending_notes.h"
 
 enum layers {
   SCALE_LAYER,
@@ -295,7 +297,6 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 #define CHORD_DEGREE_COUNT 14
 #define CHORD_PRESET_COUNT 35
 #define CHORD_MAX_TONES 15
-#define CHORD_PENDING_EVENT_COUNT 64
 #define CHORD_CONTROL_HOLD_MS 1000
 #define CHORD_DISPLAY_MS 450
 #define CHORD_RESET_DISPLAY_MS 350
@@ -306,7 +307,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 #define ARP_HOLD_MS 650
 #define ARP_INTERNAL_BPM 120
 #define ARP_DIVISION_COUNT 7
-#define ARP_MAX_SOURCE_NOTES 64
+#define ARP_MAX_SOURCE_NOTES NOTE_POOL_CAPACITY
 #define ARP_DISPLAY_FIRST_ROW 4
 #define ARP_DISPLAY_ROWS 6
 #define ARP_DISPLAY_COLS 10
@@ -349,13 +350,6 @@ typedef struct {
   uint16_t sent_mask;
   uint16_t alternate_mask;
 } active_chord_t;
-
-typedef struct {
-  bool active;
-  uint8_t slot;
-  uint8_t tone_index;
-  uint32_t due_at;
-} pending_chord_note_t;
 
 typedef struct {
   uint8_t note_count;
@@ -629,7 +623,7 @@ static uint32_t page_arrow_timer = 0;
 static bool text_scroll_holding = false;
 static bool palette_announcement = false;
 static active_chord_t active_chords[CHORD_ROOT_SLOT_COUNT];
-static pending_chord_note_t pending_chord_notes[CHORD_PENDING_EVENT_COUNT];
+static pending_notes_t pending_chord_notes;
 static uint8_t previous_chord_notes[CHORD_MAX_TONES];
 static uint8_t previous_chord_note_count = 0;
 static uint16_t custom_degree_mask = (1U << 0) | (1U << 2) | (1U << 4);
@@ -671,9 +665,7 @@ static bool arp_host_clock_seen = false;
 static bool arp_key_pressed = false;
 static bool arp_key_hold_handled = false;
 static uint32_t arp_key_press_timer = 0;
-static uint8_t arp_source_counts[MIDI_MAX_NOTE + 1];
-static uint8_t arp_played_order[ARP_MAX_SOURCE_NOTES];
-static uint8_t arp_played_count = 0;
+static note_pool_t arp_sources;
 static uint8_t arp_scale_physical_count = 0;
 static uint8_t arp_step_index = 0;
 static uint16_t arp_clock_units = 0;
@@ -704,6 +696,11 @@ static uint32_t animation_prototype_timer = 0;
 static bool layer_transition_active = false;
 static uint32_t layer_transition_timer = 0;
 static palette_color_t layer_transition_from[RGB_MATRIX_LED_COUNT];
+// Compose overlays in RAM, then write each final LED exactly once.
+static palette_color_t led_frame[RGB_MATRIX_LED_COUNT];
+static bool chord_indicators_dirty = true;
+static uint32_t chord_tone_bits[4];
+static uint32_t chord_alternate_bits[4];
 static bool dfu_sysex_matches = false;
 static bool dfu_reboot_requested = false;
 
@@ -747,8 +744,11 @@ static uint8_t led_index(uint8_t row, uint8_t col) {
 
 static void set_led_rgb(uint8_t led, uint8_t red, uint8_t green,
                         uint8_t blue) {
-  rgb_matrix_set_color(led, red, green, blue);
-  if (!layer_transition_active && led < RGB_MATRIX_LED_COUNT) {
+  if (led >= RGB_MATRIX_LED_COUNT) {
+    return;
+  }
+  led_frame[led] = (palette_color_t){red, green, blue};
+  if (!layer_transition_active) {
     layer_transition_from[led].red = red;
     layer_transition_from[led].green = green;
     layer_transition_from[led].blue = blue;
@@ -823,18 +823,53 @@ static uint8_t clamp_midi_note(int16_t note) {
   return (uint8_t)note;
 }
 
+// Keyed by all musical inputs, so EEPROM restoration and every control path
+// share the same invalidation rule. Only 37 distinct degrees serve 90 pads.
+static struct {
+  uint8_t scale;
+  uint8_t root;
+  int8_t octave;
+  uint8_t notes[MATRIX_COLS + (MATRIX_ROWS - 1) * 3];
+  uint8_t degree[PITCH_CLASS_COUNT];
+  uint16_t pitch_mask;
+} music_lookup = {.scale = UINT8_MAX};
+
+static void update_music_lookup(void) {
+  if (music_lookup.scale == selected_scale &&
+      music_lookup.root == root_pitch_class &&
+      music_lookup.octave == octave_shift) {
+    return;
+  }
+  const uint8_t count =
+      pgm_read_byte(&scale_definitions[selected_scale].note_count);
+  music_lookup.pitch_mask = 0;
+  memset(music_lookup.degree, 0, sizeof(music_lookup.degree));
+  for (uint8_t degree = 0; degree < count; ++degree) {
+    const uint8_t pitch =
+        (root_pitch_class +
+         pgm_read_byte(&scale_definitions[selected_scale].intervals[degree])) %
+        PITCH_CLASS_COUNT;
+    music_lookup.pitch_mask |= 1U << pitch;
+    music_lookup.degree[pitch] = degree;
+  }
+  for (uint8_t degree = 0; degree < sizeof(music_lookup.notes); ++degree) {
+    const uint8_t interval = pgm_read_byte(
+        &scale_definitions[selected_scale].intervals[degree % count]);
+    music_lookup.notes[degree] =
+        clamp_midi_note(MIDI_PAD_BASE_C_NOTE + root_pitch_class +
+                       (degree / count) * 12 + interval + octave_shift * 12);
+  }
+  music_lookup.scale = selected_scale;
+  music_lookup.root = root_pitch_class;
+  music_lookup.octave = octave_shift;
+  chord_indicators_dirty = true;
+}
+
 // Lowest notes are at the bottom-left. Moving right advances one scale degree;
 // moving up advances three, giving repeatable shapes and deliberate duplicates.
 static uint8_t note_for_position(uint8_t row, uint8_t col) {
-  const uint8_t note_count =
-      pgm_read_byte(&scale_definitions[selected_scale].note_count);
-  const uint8_t scale_degree = col + ((MATRIX_ROWS - 1 - row) * 3);
-  const uint8_t interval = pgm_read_byte(
-      &scale_definitions[selected_scale].intervals[scale_degree % note_count]);
-  const int16_t note = MIDI_PAD_BASE_C_NOTE + root_pitch_class +
-                       ((scale_degree / note_count) * 12) + interval +
-                       (octave_shift * 12);
-  return clamp_midi_note(note);
+  update_music_lookup();
+  return music_lookup.notes[col + ((MATRIX_ROWS - 1 - row) * 3)];
 }
 
 static void tracked_note_on(uint8_t note) {
@@ -850,12 +885,7 @@ static void tracked_note_off(uint8_t note) {
 }
 
 static bool arp_source_is_empty(void) {
-  for (uint16_t note = 0; note <= MIDI_MAX_NOTE; ++note) {
-    if (arp_source_counts[note] > 0) {
-      return false;
-    }
-  }
-  return true;
+  return arp_sources.source_count == 0;
 }
 
 static void arp_stop_output(void) {
@@ -868,89 +898,20 @@ static void arp_stop_output(void) {
 
 static void arp_clear_source(void) {
   arp_stop_output();
-  for (uint16_t note = 0; note <= MIDI_MAX_NOTE; ++note) {
-    arp_source_counts[note] = 0;
-  }
-  arp_played_count = 0;
+  note_pool_clear(&arp_sources);
   arp_step_index = 0;
   arp_clock_units = 0;
 }
 
 static void arp_source_add(uint8_t note) {
-  if (arp_source_counts[note]++ > 0) {
-    return;
-  }
-  if (arp_played_count < ARP_MAX_SOURCE_NOTES) {
-    arp_played_order[arp_played_count++] = note;
-  }
+  note_pool_add(&arp_sources, note);
 }
 
 static void arp_source_remove(uint8_t note) {
-  if (arp_source_counts[note] == 0 || --arp_source_counts[note] > 0) {
-    return;
-  }
-  for (uint8_t index = 0; index < arp_played_count; ++index) {
-    if (arp_played_order[index] != note) {
-      continue;
-    }
-    for (uint8_t following = index + 1; following < arp_played_count;
-         ++following) {
-      arp_played_order[following - 1] = arp_played_order[following];
-    }
-    --arp_played_count;
-    break;
-  }
+  note_pool_remove(&arp_sources, note);
   if (arp_source_is_empty()) {
     arp_stop_output();
   }
-}
-
-static void arp_append_unique(uint8_t *notes, uint8_t *count, uint8_t note) {
-  for (uint8_t index = 0; index < *count; ++index) {
-    if (notes[index] == note) {
-      return;
-    }
-  }
-  if (*count < ARP_MAX_SOURCE_NOTES) {
-    notes[(*count)++] = note;
-  }
-}
-
-static uint8_t arp_build_note_list(uint8_t *notes) {
-  uint8_t count = 0;
-  if (arp_selected_pattern == ARP_PATTERN_PLAYED) {
-    for (uint8_t octave = 0; octave <= arp_extra_octaves; ++octave) {
-      for (uint8_t index = 0; index < arp_played_count; ++index) {
-        const uint16_t note = arp_played_order[index] + (octave * 12);
-        if (note <= MIDI_MAX_NOTE) {
-          arp_append_unique(notes, &count, note);
-        }
-      }
-    }
-    return count;
-  }
-
-  for (uint8_t octave = 0; octave <= arp_extra_octaves; ++octave) {
-    for (uint16_t source = 0; source <= MIDI_MAX_NOTE; ++source) {
-      if (arp_source_counts[source] == 0) {
-        continue;
-      }
-      const uint16_t note = source + (octave * 12);
-      if (note <= MIDI_MAX_NOTE) {
-        arp_append_unique(notes, &count, note);
-      }
-    }
-  }
-  for (uint8_t index = 1; index < count; ++index) {
-    const uint8_t note = notes[index];
-    uint8_t position = index;
-    while (position > 0 && notes[position - 1] > note) {
-      notes[position] = notes[position - 1];
-      --position;
-    }
-    notes[position] = note;
-  }
-  return count;
 }
 
 static uint16_t arp_length_per_mille(void) {
@@ -972,8 +933,10 @@ static uint32_t arp_current_step_ms(void) {
 }
 
 static void arp_play_step(void) {
-  uint8_t notes[ARP_MAX_SOURCE_NOTES];
-  const uint8_t count = arp_build_note_list(notes);
+  uint8_t count;
+  const uint8_t *notes = note_pool_view(
+      &arp_sources, arp_selected_pattern == ARP_PATTERN_PLAYED,
+      arp_extra_octaves, &count);
   if (!arp_enabled || count == 0) {
     arp_stop_output();
     return;
@@ -1142,6 +1105,7 @@ static void release_note(uint8_t row, uint8_t col) {
 }
 
 static void release_tracked_notes(void) {
+  chord_indicators_dirty = true;
   for (uint16_t note = 0; note <= MIDI_MAX_NOTE; ++note) {
     if (active_note_counts[note] > 0) {
       midi_send_noteoff(&midi_device, MIDI_PAD_CHANNEL, note, 0);
@@ -1161,9 +1125,7 @@ static void release_tracked_notes(void) {
     active_chords[slot].sent_mask = 0;
     active_chords[slot].alternate_mask = 0;
   }
-  for (uint8_t event = 0; event < CHORD_PENDING_EVENT_COUNT; ++event) {
-    pending_chord_notes[event].active = false;
-  }
+  pending_notes_clear(&pending_chord_notes);
   previous_chord_note_count = 0;
   arp_clear_source();
   arp_scale_physical_count = 0;
@@ -1175,44 +1137,19 @@ static uint8_t chord_root_slot(uint8_t row, uint8_t col) {
 }
 
 static uint8_t chord_root_note_for_position(uint8_t row, uint8_t col) {
-  const uint8_t note_count =
-      pgm_read_byte(&scale_definitions[selected_scale].note_count);
-  const uint8_t scale_degree = (MATRIX_ROWS - 1) - row;
-  const uint8_t interval = pgm_read_byte(
-      &scale_definitions[selected_scale].intervals[scale_degree % note_count]);
-  const int16_t note = MIDI_PAD_BASE_C_NOTE + root_pitch_class + interval +
-                       ((scale_degree / note_count) * 12) +
-                       ((col - CHORD_ROOT_FIRST_COL) * 12) +
-                       (octave_shift * 12);
-  return clamp_midi_note(note);
+  update_music_lookup();
+  return clamp_midi_note(music_lookup.notes[MATRIX_ROWS - 1 - row] +
+                         (col - CHORD_ROOT_FIRST_COL) * 12);
 }
 
 static uint8_t chord_scale_degree_for_note(uint8_t note) {
-  const uint8_t note_count =
-      pgm_read_byte(&scale_definitions[selected_scale].note_count);
-  const uint8_t relative_pitch =
-      (note + PITCH_CLASS_COUNT - root_pitch_class) % PITCH_CLASS_COUNT;
-  for (uint8_t degree = 0; degree < note_count; ++degree) {
-    if (pgm_read_byte(&scale_definitions[selected_scale].intervals[degree]) ==
-        relative_pitch) {
-      return degree;
-    }
-  }
-  return 0;
+  update_music_lookup();
+  return music_lookup.degree[note % PITCH_CLASS_COUNT];
 }
 
 static bool note_is_in_selected_scale(uint8_t note) {
-  const uint8_t note_count =
-      pgm_read_byte(&scale_definitions[selected_scale].note_count);
-  const uint8_t relative_pitch =
-      (note + PITCH_CLASS_COUNT - root_pitch_class) % PITCH_CLASS_COUNT;
-  for (uint8_t degree = 0; degree < note_count; ++degree) {
-    if (pgm_read_byte(&scale_definitions[selected_scale].intervals[degree]) ==
-        relative_pitch) {
-      return true;
-    }
-  }
-  return false;
+  update_music_lookup();
+  return music_lookup.pitch_mask & (1U << (note % PITCH_CLASS_COUNT));
 }
 
 static void nearest_scale_notes(uint8_t note, uint8_t *lower,
@@ -1292,8 +1229,13 @@ static void apply_chord_inversion(int16_t *tones, uint8_t count,
   }
   sort_chord_tones(tones, count);
   for (uint8_t step = 0; step < inversion; ++step) {
-    tones[0] += 12;
-    sort_chord_tones(tones, count);
+    const int16_t raised = tones[0] + 12;
+    uint8_t position = 0;
+    while (position + 1 < count && tones[position + 1] < raised) {
+      tones[position] = tones[position + 1];
+      ++position;
+    }
+    tones[position] = raised;
   }
 }
 
@@ -1437,12 +1379,15 @@ static uint8_t build_chord_notes(uint8_t root_note, uint8_t *output,
     uint16_t best_score = UINT16_MAX;
     int16_t best[CHORD_MAX_TONES];
     uint8_t best_count = 0;
+    int16_t inverted[CHORD_MAX_TONES];
+    memcpy(inverted, base, count * sizeof(*base));
+    sort_chord_tones(inverted, count);
     for (uint8_t inversion = 0; inversion < count; ++inversion) {
       int16_t candidate[CHORD_MAX_TONES];
       for (uint8_t index = 0; index < count; ++index) {
-        candidate[index] = base[index];
+        candidate[index] = inverted[index];
       }
-      apply_chord_inversion(candidate, count, inversion);
+      apply_chord_inversion(inverted, count, 1);
       apply_chord_drop(candidate, count);
       apply_chord_open(candidate, count);
       const uint8_t candidate_count =
@@ -1511,18 +1456,10 @@ static uint8_t build_chord_notes(uint8_t root_note, uint8_t *output,
   return unique_count;
 }
 
-static void cancel_pending_chord_notes(uint8_t slot) {
-  for (uint8_t event = 0; event < CHORD_PENDING_EVENT_COUNT; ++event) {
-    if (pending_chord_notes[event].active &&
-        pending_chord_notes[event].slot == slot) {
-      pending_chord_notes[event].active = false;
-    }
-  }
-}
-
 static void stop_chord_slot(uint8_t slot) {
+  chord_indicators_dirty = true;
   active_chord_t *chord = &active_chords[slot];
-  cancel_pending_chord_notes(slot);
+  pending_notes_cancel(&pending_chord_notes, slot);
   for (uint8_t index = 0; index < chord->note_count; ++index) {
     if (chord->sent_mask & (1U << index)) {
       if (arp_enabled) {
@@ -1560,16 +1497,9 @@ static void send_chord_tone(uint8_t slot, uint8_t tone_index) {
 
 static void queue_chord_tone(uint8_t slot, uint8_t tone_index,
                              uint32_t due_at) {
-  for (uint8_t event = 0; event < CHORD_PENDING_EVENT_COUNT; ++event) {
-    if (!pending_chord_notes[event].active) {
-      pending_chord_notes[event].active = true;
-      pending_chord_notes[event].slot = slot;
-      pending_chord_notes[event].tone_index = tone_index;
-      pending_chord_notes[event].due_at = due_at;
-      return;
-    }
+  if (!pending_notes_add(&pending_chord_notes, slot, tone_index, due_at)) {
+    send_chord_tone(slot, tone_index);
   }
-  send_chord_tone(slot, tone_index);
 }
 
 static uint8_t chord_strum_delay(void) {
@@ -2002,13 +1932,7 @@ void matrix_scan_user(void) {
     }
   }
 
-  for (uint8_t event = 0; event < CHORD_PENDING_EVENT_COUNT; ++event) {
-    pending_chord_note_t *pending = &pending_chord_notes[event];
-    if (pending->active && (int32_t)(now - pending->due_at) >= 0) {
-      pending->active = false;
-      send_chord_tone(pending->slot, pending->tone_index);
-    }
-  }
+  pending_notes_run(&pending_chord_notes, now, send_chord_tone);
 }
 
 static void clear_page_arrow(void) { transient_arrow = PAGE_ARROW_NONE; }
@@ -2066,6 +1990,7 @@ void eeconfig_init_user(void) {
 }
 
 void keyboard_post_init_user(void) {
+  rgb_matrix_mode_noeeprom(RGB_MATRIX_CUSTOM_MIDI_PAD_CANVAS);
   persistent_config.raw = eeconfig_read_user();
   if (!persistent_config_is_valid()) {
     eeconfig_init_user();
@@ -2540,8 +2465,9 @@ static void set_scale_selector_led(uint8_t slot) {
 }
 
 static void clear_all_leds(void) {
-  for (uint8_t led = 0; led < RGB_MATRIX_LED_COUNT; ++led) {
-    set_led_rgb(led, 0, 0, 0);
+  memset(led_frame, 0, sizeof(led_frame));
+  if (!layer_transition_active) {
+    memset(layer_transition_from, 0, sizeof(layer_transition_from));
   }
 }
 
@@ -2764,16 +2690,14 @@ static void render_layer_transition(void) {
       const bool wipe_covers_key = diagonal <= edge;
 
       if (covering_old_layer && !wipe_covers_key) {
-        rgb_matrix_set_color(led, layer_transition_from[led].red,
-                             layer_transition_from[led].green,
-                             layer_transition_from[led].blue);
+        led_frame[led] = layer_transition_from[led];
       } else if (wipe_covers_key) {
         if (diagonal == edge || diagonal + 1 == edge) {
-          rgb_matrix_set_color(led, PRESSED_PAD_BRIGHTNESS,
-                               PRESSED_PAD_BRIGHTNESS,
-                               PRESSED_PAD_BRIGHTNESS);
+          led_frame[led] = (palette_color_t){PRESSED_PAD_BRIGHTNESS,
+                                            PRESSED_PAD_BRIGHTNESS,
+                                            PRESSED_PAD_BRIGHTNESS};
         } else {
-          rgb_matrix_set_color(led, wipe_red, wipe_green, wipe_blue);
+          led_frame[led] = (palette_color_t){wipe_red, wipe_green, wipe_blue};
         }
       }
     }
@@ -3166,53 +3090,42 @@ static void render_chord_shapes(void) {
   }
 }
 
-static bool note_is_an_active_chord_tone(uint8_t note) {
+static void update_chord_indicators(void) {
+  static uint8_t cached_quantize = UINT8_MAX;
+  update_music_lookup();
+  if (!chord_indicators_dirty && cached_quantize == chord_quantize) {
+    return;
+  }
+  memset(chord_tone_bits, 0, sizeof(chord_tone_bits));
+  memset(chord_alternate_bits, 0, sizeof(chord_alternate_bits));
   for (uint8_t slot = 0; slot < CHORD_ROOT_SLOT_COUNT; ++slot) {
     const active_chord_t *chord = &active_chords[slot];
     if (!chord->active) {
       continue;
     }
     for (uint8_t index = 0; index < chord->note_count; ++index) {
-      if (chord->notes[index] == note) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-static bool note_is_an_alternate_indicator(uint8_t note) {
-  if (chord_quantize != CHORD_QUANTIZE_OFF) {
-    return false;
-  }
-  for (uint8_t slot = 0; slot < CHORD_ROOT_SLOT_COUNT; ++slot) {
-    const active_chord_t *chord = &active_chords[slot];
-    if (!chord->active) {
-      continue;
-    }
-    for (uint8_t index = 0; index < chord->note_count; ++index) {
-      if (!(chord->alternate_mask & (1U << index))) {
+      const uint8_t note = chord->notes[index];
+      chord_tone_bits[note / 32] |= UINT32_C(1) << (note % 32);
+      if (chord_quantize != CHORD_QUANTIZE_OFF ||
+          !(chord->alternate_mask & (1U << index))) {
         continue;
       }
-      const uint8_t altered_note = chord->notes[index];
-      uint8_t lower;
-      uint8_t upper;
-      uint8_t lower_distance;
-      uint8_t upper_distance;
-      nearest_scale_notes(altered_note, &lower, &upper, &lower_distance,
-                          &upper_distance);
-      const uint8_t nearest_distance =
-          lower_distance < upper_distance ? lower_distance : upper_distance;
-      if ((note == lower && lower_distance == nearest_distance) ||
-          (note == upper && upper_distance == nearest_distance)) {
-        return true;
+      uint8_t lower, upper, lower_distance, upper_distance;
+      nearest_scale_notes(note, &lower, &upper, &lower_distance, &upper_distance);
+      if (lower_distance <= upper_distance) {
+        chord_alternate_bits[lower / 32] |= UINT32_C(1) << (lower % 32);
+      }
+      if (upper_distance <= lower_distance) {
+        chord_alternate_bits[upper / 32] |= UINT32_C(1) << (upper % 32);
       }
     }
   }
-  return false;
+  cached_quantize = chord_quantize;
+  chord_indicators_dirty = false;
 }
 
 static void render_chord_root_grid(void) {
+  update_chord_indicators();
   for (uint8_t row = CHORD_ROOT_FIRST_ROW; row < MATRIX_ROWS; ++row) {
     for (uint8_t col = CHORD_ROOT_FIRST_COL; col < MATRIX_COLS; ++col) {
       const uint8_t note = chord_root_note_for_position(row, col);
@@ -3224,9 +3137,9 @@ static void render_chord_root_grid(void) {
                       arp_enabled ? COLOR_QUINARY : COLOR_SECONDARY,
                       arp_enabled ? ROOT_NOTE_BRIGHTNESS
                                   : PRESSED_PAD_BRIGHTNESS);
-      } else if (note_is_an_alternate_indicator(note)) {
+      } else if ((chord_alternate_bits[note / 32] & (UINT32_C(1) << (note % 32)))) {
         set_key_color(row, col, COLOR_QUATERNARY, DEFAULT_PAD_BRIGHTNESS);
-      } else if (note_is_an_active_chord_tone(note)) {
+      } else if ((chord_tone_bits[note / 32] & (UINT32_C(1) << (note % 32)))) {
         set_key_color(row, col, COLOR_QUINARY, DEFAULT_PAD_BRIGHTNESS);
       } else if (note % PITCH_CLASS_COUNT == root_pitch_class) {
         set_key_color(row, col, COLOR_TERTIARY, ROOT_NOTE_BRIGHTNESS);
@@ -3361,5 +3274,9 @@ bool rgb_matrix_indicators_user(void) {
   }
   render_layer_transition();
   render_physically_pressed_keys();
+  for (uint8_t led = 0; led < RGB_MATRIX_LED_COUNT; ++led) {
+    rgb_matrix_set_color(led, led_frame[led].red, led_frame[led].green,
+                         led_frame[led].blue);
+  }
   return false;
 }
