@@ -21,6 +21,8 @@ for path in source.iterdir():
         shutil.copy2(path, target)
 for name in ("Makefile", "qmk.json"):
     shutil.copy2(ROOT / name, destination)
+(destination / "tools").mkdir()
+shutil.copy2(ROOT / "tools/qmk-userspace", destination / "tools/qmk-userspace")
 text = (target / "keymap.c").read_text()
 text = text.replace("enum layers {", """static bool device_bench_requested;
 static void device_bench_run(void);

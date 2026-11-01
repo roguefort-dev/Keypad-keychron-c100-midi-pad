@@ -204,8 +204,8 @@ The resulting file is `keychron_c100_8k_midi_pad.bin` in this repository's
 root. GitHub Actions also builds the firmware after each push and publishes the
 binary through the repository workflow.
 
-The current build uses 73,982 bytes of the target's verified 128 KiB flash
-region (56.4%).
+The current build uses 74,418 bytes of the target's verified 128 KiB flash
+region (56.8%).
 
 ## Performance and regression checks
 
@@ -223,6 +223,11 @@ After the pad reconnects, confirm that the operating system exposes a USB MIDI
 input. Open a MIDI monitor or DAW and verify that note presses produce matching
 note-on and note-off messages. Changing the root, scale, octave, or active layer
 releases all tracked notes first to prevent stuck notes.
+
+For Windows discovery, the firmware advertises the USB interface-association
+class required to group the MIDI function. See the
+[Windows MIDI guide](docs/windows-midi.md) for descriptor checks, the focused
+`make test-usb` regression check, and recovery from an existing device binding.
 
 ## Flashing and recovery
 
