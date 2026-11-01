@@ -1,7 +1,6 @@
 """Inject host responses to exercise flashing without touching USB hardware."""
 import contextlib
 import ctypes as ct
-import importlib.util
 import io
 from pathlib import Path
 import struct
@@ -11,9 +10,8 @@ import unittest
 from unittest.mock import Mock, patch
 import zlib
 
-spec = importlib.util.spec_from_file_location("flash_c100", Path(__file__).resolve().parents[1] / "tools/flash_c100.py")
-flash = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(flash)
+from tools import flash_c100 as flash
+from tools import windows_midi as ks
 
 
 def firmware_bytes():
@@ -78,7 +76,7 @@ class FlashTest(unittest.TestCase):
 
     def test_dfu_transition_timeout_does_not_download(self):
         self.host.dfu.return_value = False
-        with self.assertRaisesRegex(RuntimeError, "did not enter DFU"):
+        with self.assertRaisesRegex(RuntimeError, "did not become accessible"):
             self.run_flash()
         self.host.download.assert_not_called()
 
@@ -114,6 +112,19 @@ class FlashTest(unittest.TestCase):
                         host.dfu()
                 else:
                     self.assertEqual(host.dfu(), expected)
+        run.return_value = subprocess.CompletedProcess([], 74, "", "Cannot open DFU device 2e3c:df11")
+        self.assertFalse(host.dfu(allow_pending=True))
+
+    def test_dfu_wait_allows_driver_binding_delay(self):
+        self.host.dfu.side_effect = [False, False, True]
+
+        def wait(probe):
+            return probe() or probe()
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            flash.flash(self.host, self.image, wait=wait)
+        self.host.dfu.assert_called_with(allow_pending=True)
+        self.host.download.assert_called_once()
 
     def test_native_midi_layout_and_sysex_buffer_lifetime(self):
         # The WinSDK declares MIDIHDR with one-byte packing on both x86/x64.
@@ -134,6 +145,102 @@ class FlashTest(unittest.TestCase):
         names = [call[0] for call in midi.mm.mock_calls]
         self.assertLess(names.index("midiOutReset"), names.index("midiOutUnprepareHeader"))
         midi.mm.midiOutClose.assert_called_once()
+
+    def test_kernel_fallback_when_winmm_has_no_port(self):
+        midi = object.__new__(flash.WindowsMidi)
+        midi.mm = Mock()
+        midi.mm.midiOutGetNumDevs.return_value = 0
+        midi.kernel_midi = Mock()
+        port = (("C100 driver path", 0), "Keychron C100 8K (kernel MIDI)")
+        midi.kernel_midi.ports.return_value = [port]
+        self.assertEqual(midi.ports(), [port])
+        midi.reboot(port)
+        midi.kernel_midi.send.assert_called_once_with(port, flash.DFU_COMMAND)
+        midi.mm.midiOutOpen.assert_not_called()
+
+    def test_kernel_data_range_parser(self):
+        data_range = struct.pack("<IIII", 64, 0, 0, 0) + ks.MUSIC + ks.MIDI + ks.NONE
+        valid = struct.pack("<II", 72, 1) + data_range
+        for data, expected in ((valid, True), (valid[:8], False), (b"", False),
+                               (valid[:40] + b"\0" * 16 + valid[56:], False),
+                               (struct.pack("<II", 72, 2) + data_range, False)):
+            with self.subTest(data=data):
+                self.assertEqual(ks.midi_range(data), expected)
+
+    def test_kernel_discovery_is_scoped_to_the_c100(self):
+        midi = object.__new__(ks.KernelMidi)
+        midi.config = Mock()
+        target = r'\\?\USB#VID_3434&PID_042C&MI_02#123'
+        paths = [target, target.replace('3434', '1234'), target.replace('MI_02', 'MI_00')]
+        text = '\0'.join(paths) + '\0\0'
+
+        def size(length, category, device, flags):
+            length._obj.value = len(text)
+            return 0
+
+        def fill(category, device, output, length, flags):
+            output[:] = text
+            return 0
+
+        midi.config.CM_Get_Device_Interface_List_SizeW.side_effect = size
+        midi.config.CM_Get_Device_Interface_ListW.side_effect = fill
+        self.assertEqual(midi.paths(), [target])
+
+    def test_kernel_midi_packet_and_handle_cleanup(self):
+        midi = object.__new__(ks.KernelMidi)
+        midi.kernel, midi.ks = Mock(), Mock()
+        midi.ks.KsCreatePin.return_value = 0
+        midi.open_filter = contextlib.contextmanager(lambda path: iter([123]))
+        states = []
+
+        def ioctl(handle, code, request=b"", output=None, asynchronous=False):
+            self.assertTrue(asynchronous)
+            if code == ks.IOCTL_PROPERTY:
+                states.append(output.value)
+            else:
+                self.assertEqual(code, ks.IOCTL_WRITE_STREAM)
+                packet = ct.string_at(output.data, output.used)
+                delta, length = struct.unpack_from("<II", packet)
+                self.assertEqual(delta, 0)
+                self.assertEqual(packet[8:8 + length], flash.DFU_COMMAND)
+                self.assertEqual(len(packet) % 4, 0)
+
+        midi.ioctl = Mock(side_effect=ioctl)
+        midi.send((("C100 driver path", 0), "C100"), flash.DFU_COMMAND)
+        self.assertEqual(states, [1, 2, 3])
+        midi.kernel.CloseHandle.assert_called_once()
+
+    @patch.object(ct, "get_last_error", return_value=997, create=True)
+    def test_kernel_timeout_cancels_and_drains_before_freeing_buffers(self, get_error):
+        midi = object.__new__(ks.KernelMidi)
+        midi.kernel = Mock()
+        midi.kernel.CreateEventW.return_value = 7
+        midi.kernel.DeviceIoControl.return_value = False
+        midi.kernel.WaitForSingleObject.return_value = 258  # WAIT_TIMEOUT
+        with self.assertRaisesRegex(RuntimeError, "timed out"):
+            midi.ioctl(123, ks.IOCTL_WRITE_STREAM, output=ks.StreamHeader(), asynchronous=True)
+        names = [call[0] for call in midi.kernel.mock_calls]
+        self.assertLess(names.index("CancelIoEx"), names.index("GetOverlappedResult"))
+        self.assertLess(names.index("GetOverlappedResult"), names.index("CloseHandle"))
+
+    def test_kernel_ioctl_passes_native_output_pointers(self):
+        midi = object.__new__(ks.KernelMidi)
+        midi.kernel = Mock()
+        calls = []
+        signature = ct.CFUNCTYPE(ct.c_int, ct.c_void_p, ct.c_uint, ct.c_void_p, ct.c_uint,
+                                ct.c_void_p, ct.c_uint, ct.POINTER(ct.c_uint), ct.POINTER(ks.Overlapped))
+
+        @signature
+        def ioctl(handle, code, request, request_size, output, output_size, received, pending):
+            calls.append(ct.string_at(output, output_size))
+            received.contents.value = output_size
+            return 1
+
+        midi.kernel.DeviceIoControl = ioctl
+        for output in (ct.c_uint32(3), ks.StreamHeader(), ct.create_string_buffer(8)):
+            with self.subTest(output=type(output)):
+                self.assertEqual(midi.ioctl(123, ks.IOCTL_PROPERTY, output=output), bytes(output))
+        self.assertEqual(len(calls), 3)
 
 
 if __name__ == "__main__":

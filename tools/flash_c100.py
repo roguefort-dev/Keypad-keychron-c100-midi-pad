@@ -14,6 +14,11 @@ import time
 import urllib.request
 import zlib
 
+if __package__:
+    from .windows_midi import KernelMidi
+else:
+    from windows_midi import KernelMidi
+
 ROOT = Path(__file__).resolve().parent.parent
 FIRMWARE_NAME = "keychron_c100_8k_midi_pad.bin"
 CACHE = ROOT / ".cache" / "c100-windows"
@@ -79,6 +84,7 @@ class WindowsMidi:
 
     def __init__(self):
         self.mm = ct.WinDLL("winmm")
+        self.kernel_midi = KernelMidi()
         signatures = {
             "midiOutGetNumDevs": [],
             "midiOutGetDevCapsW": [ct.c_size_t, ct.POINTER(self.Caps), ct.c_uint],
@@ -105,9 +111,12 @@ class WindowsMidi:
             self.check(self.mm.midiOutGetDevCapsW(index, ct.byref(caps), ct.sizeof(caps)), "MIDI enumeration")
             if "Keychron C100 8K" in caps.name:
                 result.append((index, caps.name))
-        return result
+        return result or self.kernel_midi.ports()
 
     def reboot(self, port):
+        if isinstance(port[0], tuple):
+            self.kernel_midi.send(port, DFU_COMMAND)
+            return
         handle = ct.c_void_p()
         self.check(self.mm.midiOutOpen(ct.byref(handle), port[0], 0, 0, 0), "Opening MIDI output")
         data = ct.create_string_buffer(DFU_COMMAND)
@@ -141,7 +150,7 @@ class Host:
                 if not shutil.which(name):
                     raise RuntimeError(f"Required command is missing: {name}")
 
-    def dfu(self):
+    def dfu(self, allow_pending=False):
         result = subprocess.run([self.dfu_util, "-d", "2e3c:df11", "-l"],
                                 capture_output=True, text=True, timeout=5)
         output = result.stdout + result.stderr
@@ -149,6 +158,8 @@ class Host:
         if len(matches) > 1:
             raise RuntimeError("Multiple AT32 bootloaders connected; leave only the C100 connected.")
         if "Cannot open DFU device" in output:
+            if allow_pending:
+                return False  # Windows can publish DFU before WinUSB finishes binding.
             raise RuntimeError("C100 DFU is present but inaccessible. Run the Windows setup or install the Linux udev rule.")
         if result.returncode:
             raise RuntimeError(f"dfu-util probe failed ({result.returncode}): {output.strip()}")
@@ -193,8 +204,8 @@ def flash(host, firmware, wait=wait_for):
             raise RuntimeError("Expected exactly one C100 MIDI output. Run Windows setup; older firmware may need one manual DFU entry.")
         print(f"Requesting DFU through {ports[0][1]}...", flush=True)
         host.reboot(ports[0])
-        if not wait(host.dfu):
-            raise RuntimeError("C100 did not enter DFU. Firmware may predate the host-triggered command.")
+        if not wait(lambda: host.dfu(allow_pending=True)):
+            raise RuntimeError("C100 did not become accessible in DFU. Check its driver and MIDI reboot support.")
     result = host.download(firmware)
     output = result.stdout + result.stderr
     print(output, end="", flush=True)
