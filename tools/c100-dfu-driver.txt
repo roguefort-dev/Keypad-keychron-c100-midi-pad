@@ -1,0 +1,3 @@
+# QMK driver installer format: driver,description,vid,pid,guid
+# Scope installation to the AT32 DFU bootloader; never replace runtime HID/MIDI.
+winusb,Keychron C100 AT32 DFU,2E3C,DF11,7c1a3e7a-2d88-4ee4-9f8a-eef6c100df11

@@ -17,7 +17,10 @@ HOST_CFLAGS ?= -Os -Wall -Wextra -Werror
 KEYMAP_DIR := keyboards/keychron/c100_8k/keymaps/midi_pad
 HOST_TESTS := arp_logic chord_degree_logic note_pool pending_notes
 
-.PHONY: test test-sanitize test-usb benchmark
+.PHONY: test test-sanitize test-usb test-flash benchmark
+
+test-flash:
+	python3 -m unittest discover -s tests -p flash_c100_test.py
 
 test:
 	@mkdir -p .build/tests

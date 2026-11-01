@@ -8,6 +8,7 @@
 # QMK/editor caches
 .build/
 .cache/
+__pycache__/
 compile_commands.json
 .clangd/
 .DS_Store
