@@ -28,6 +28,13 @@ can be built from any combination of degrees, including rootless voicings.
 Chromatic notes remain available even when they fall outside the selected
 scale, with alternate-color feedback to make that visible.
 
+### Arpeggiate
+
+The arpeggiator turns held notes into a clocked pattern. It works on notes from
+Scale mode and on chords from Chord mode, follows MIDI clock from the host or
+runs on its own at 120 BPM, and offers eight patterns, seven note divisions with
+dotted and triplet variants, four note lengths, and up to two extra octaves.
+
 ### Choose the key, scale, and colors
 
 Settings provides root and scale selection, paged access to additional scales,
@@ -45,12 +52,15 @@ future modes and layouts.
 ### Shared top row
 
 The top-left two keys shift the playable range down or up by one octave. The
-fourth and fifth keys switch directly to Scale or Chord mode, and the top-right
-key momentarily opens Settings. This row is identical in both performance
-modes.
+fourth and fifth keys switch directly to Scale or Chord mode, the sixth key
+controls the arpeggiator, and the top-right key momentarily opens Settings.
+This row is identical in both performance modes and on the arpeggiator page.
 
-| Oct − | Oct + |  | Scale | Chord |  |  |  |  | Hold Settings |
+| Oct − | Oct + |  | Scale | Chord | Arp |  |  |  | Hold Settings |
 |---|---|---|---|---|---|---|---|---|---|
+
+Tapping `Arp` opens the arpeggiator page. Holding it for 650 ms switches the
+arpeggiator on or off without leaving the current mode.
 
 While Settings is held, pressing the key immediately to its left opens the
 latched layer-select page. Releasing Settings does not return to the previous
@@ -123,6 +133,47 @@ Control changes temporarily replace the 7×3 root grid with a bottom-aligned
 the six pixels above the glyph as a counter; color laps extend the counter
 beyond six. Stepped voicing controls use a separate rainbow palette.
 
+### Arpeggiator
+
+The arpeggiator is a shared processor behind both performance modes. While it
+is on, held notes are not sent directly; they become its source notes, and it
+plays them one step at a time. Duplicate pads of the same MIDI note count as
+one source note. Releasing the last source note stops the output.
+
+Tap `Arp` in the top row to open its page; choose Scale or Chord in the top row
+to leave it. The third row holds the on/off key at its left edge, and the
+fourth row holds the ten controls:
+
+| Pattern − | Pattern + | Division − | Division + | Length | Octaves | Retrigger | Latch | Host clock | Dot / triplet |
+|---|---|---|---|---|---|---|---|---|---|
+
+- `Pattern −` and `Pattern +` step through Up, Down, Up-down, Down-up, Thumb,
+  Pinky, Played, and Chord. Thumb alternates the lowest note with each higher
+  note in turn; Pinky alternates each lower note with the highest. Played uses
+  the order in which the notes were pressed. Chord repeats all source notes
+  together on every step.
+- `Division −` and `Division +` select the step length from 1/1 to 1/64.
+- `Length` cycles the gate through 25%, 50%, 75%, and legato. In legato the
+  next Note On is sent before the previous Note Off, so mono synths see a real
+  overlap.
+- `Octaves` cycles 0, +1, and +2 extra octaves above the source notes.
+- `Retrigger` decides whether the pattern returns to its first step whenever a
+  source note is pressed or released. Changing the pattern, division, octaves,
+  modifier, or clock source always restarts it.
+- `Latch` is the same latch as `LATCH` in Chord mode. With latch on, source
+  notes keep sounding after release and are replaced by the next notes played.
+- `Host clock` selects the timing source. When it is on and the host sends MIDI
+  clock, steps follow that clock, MIDI Start restarts the pattern, and MIDI
+  Stop silences it. If no clock arrives for 750 ms, or host clock is off, the
+  arpeggiator runs on its internal 120 BPM clock.
+- `Dot / triplet` cycles Off, Dotted, and Triplet for the selected division.
+
+The six rows below the controls are a display. It shows an animated preview of
+the selected pattern, and each change briefly shows its new value as text.
+
+Arpeggiator settings are not stored; they return to their defaults when the
+keyboard is unplugged.
+
 ### Settings layout
 
 Hold the top-right Settings key to open this 10×10 layout:
@@ -170,6 +221,8 @@ restored after unplugging or rebooting.
 | MIDI velocity | 100 |
 | MIDI channel | 1 |
 | Octave shift | −2 to +2 |
+| Arpeggiator | Off; Up pattern, 1/16, 75% length, no extra octaves |
+| Arpeggiator clock | Host clock on, retrigger on; internal tempo 120 BPM |
 | Ordinary-pad brightness | 180 |
 | Root-note brightness | 225 |
 | Physical-press brightness | 255 |
@@ -263,6 +316,12 @@ sudo install -Dm644 udev/50-keychron-c100-dfu.rules \
   /etc/udev/rules.d/50-keychron-c100-dfu.rules
 sudo udevadm control --reload-rules
 ```
+
+The rule grants access to the user logged in at the machine's local seat. Over
+SSH or on a headless machine there is no such seat, and `dfu-util` still reports
+that it cannot open the device. In that case give the device to a group you
+belong to by appending, for example, `, GROUP="plugdev", MODE="0660"` to the
+rule.
 
 The rule takes effect the next time the keyboard enters DFU. For the first
 firmware installation, enter DFU manually by holding the top-left key while
